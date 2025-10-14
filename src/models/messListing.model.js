@@ -80,9 +80,15 @@ const messListing = new mongoose.Schema(
             type: String,
             require: true
         },
-        image:[{
-            type: String,
-            require: true
+        image: [{
+            url: {
+                type: String,
+                required: true
+            },
+            public_id: {
+                type: String,
+                required: true
+            }
         }],
         view:{
             type: Number,
@@ -95,12 +101,7 @@ const messListing = new mongoose.Schema(
     },
     { timestamps: true }
 );
-messListingSchema.pre('validate', function(next) {
-    if (this.images.length < 3) {
-        this.invalidate('images', 'At least 3 images are required');
-    }
-    next();
-});
+
 
 const MessListing = mongoose.model("MessListing", messListing);
 

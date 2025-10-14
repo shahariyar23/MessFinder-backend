@@ -248,6 +248,68 @@ const resetPassword = asyncHandler(async (req, res) => {
 });
 
 
+const getAllStudents = asyncHandler(async (req, res) => {
+     if (req.user.role !== "admin") {
+        throw new ApiError(403, "Only admin can see all students");
+    }
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const students = await User.find({ role: 'student' })
+        .select('-password')
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 });
+
+    const totalStudents = await User.countDocuments({ role: 'student' });
+    const totalPages = Math.ceil(totalStudents / limit);
+
+    return res.status(200).json(
+        new ApiSuccess("Students retrieved successfully", {
+            students,
+            pagination: {
+                currentPage: page,
+                totalPages,
+                totalStudents,
+                hasNext: page < totalPages,
+                hasPrev: page > 1
+            }
+        })
+    );
+});
 
 
-export { register, login, logout, authMiddleware, generateResetCode, verifyResetCode, resetPassword };
+const getAllOwners = asyncHandler(async (req, res) => {
+    if (req.user.role !== "admin") {
+        throw new ApiError(403, "Only admin can see all students");
+    }
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+
+    const students = await User.find({ role: 'owner' })
+        .select('-password')
+        .skip(skip)
+        .limit(limit)
+        .sort({ createdAt: -1 });
+
+    const totalOwners = await User.countDocuments({ role: 'owner' });
+    const totalPages = Math.ceil(totalOwners / limit);
+
+    return res.status(200).json(
+        new ApiSuccess("Owners retrieved successfully", {
+            students,
+            pagination: {
+                currentPage: page,
+                totalPages,
+                totalOwners,
+                hasNext: page < totalPages,
+                hasPrev: page > 1
+            }
+        })
+    );
+});
+
+
+export { register, login, logout, authMiddleware, generateResetCode, verifyResetCode, resetPassword, getAllOwners, getAllStudents };
