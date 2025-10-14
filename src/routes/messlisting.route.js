@@ -1,6 +1,6 @@
 import express from "express";
 import { upload } from "../middleware/multer.js";
-import { authMiddleware } from "../controllers/user.controller.js";
+import { authMiddleware } from "../middleware/authMiddleware.js";
 import { addMess, advancedSearchMess,withOutSearchSort, getAllMess, messInfoWithView, messOnlyNotBook, deleteMess } from "../controllers/messListing.controller.js";
 import {validateImageCount} from "../middleware/validateImageCount.js"
 

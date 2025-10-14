@@ -1,7 +1,8 @@
 import express from "express";
 const userRouter = express.Router();
-import { authMiddleware, generateResetCode, getAllOwners, getAllStudents, login, logout, register, resetPassword, verifyResetCode } from "../controllers/user.controller.js";
+import { generateResetCode, getAllOwners, getAllStudents, login, logout, register, resetPassword, verifyResetCode } from "../controllers/user.controller.js";
 import ApiSuccess from "../utils/ApiSuccess.js";
+import { authMiddleware } from "../middleware/authMiddleware.js";
 
 userRouter.get("/check-auth", authMiddleware, (req, res) => {
   const user = req.user;

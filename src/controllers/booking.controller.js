@@ -1,5 +1,6 @@
-import Booking from '../models/Booking.js';
-import MessListing from '../models/MessListing.js';
+
+import Booking from '../models/booking.model.js';
+import MessListing from '../models/messListing.model.js';
 import ApiError from '../utils/ApiError.js';
 import ApiSuccess from '../utils/ApiSuccess.js';
 import asyncHandler from '../utils/asyncHandler.js';
@@ -37,7 +38,7 @@ const createBooking = asyncHandler(async (req, res) => {
 
     // Create booking
     const booking = new Booking({
-        user_id: req.user._id,
+        user_id: req.user.id,
         mess_id,
         owner_id: mess.owner_id,
         checkInDate: new Date(checkInDate),

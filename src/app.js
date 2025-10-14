@@ -25,11 +25,13 @@ app.use(cookieParser());
 import userRouter from './routes/user.route.js';
 import errorHandler from './middleware/errorHandler.js';
 import messListingRoute from './routes/messlisting.route.js';
+import bookingRoute from './routes/booking.route.js';
 
 
 app.use(errorHandler);
 app.use("/api/v1/user", userRouter);
-app.use("/api/v1/mess", messListingRoute)
+app.use("/api/v1/mess", messListingRoute);
+app.use("/api/v1/messbook", bookingRoute);
 
 
 

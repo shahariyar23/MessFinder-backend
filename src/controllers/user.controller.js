@@ -129,17 +129,6 @@ const logout = asyncHandler((req, res)=>{
     res.clearCookie("token").json(new ApiSuccess("logout successful", 200))
 })
 
-
-const authMiddleware = asyncHandler(async (req, res, next)=>{
-    const token = req.cookies.token;
-    if(!token){
-        throw new ApiError(400, "Unautoraize user")
-    }
-    const decode = jwt.verify(token, process.env.JWT_SECRET);
-    req.user = decode;
-    next();
-})
-
 // controllers/authController.js
 const generateResetCode = asyncHandler(async (req, res) => {
     const { email } = req.body;
@@ -312,4 +301,4 @@ const getAllOwners = asyncHandler(async (req, res) => {
 });
 
 
-export { register, login, logout, authMiddleware, generateResetCode, verifyResetCode, resetPassword, getAllOwners, getAllStudents };
+export { register, login, logout, generateResetCode, verifyResetCode, resetPassword, getAllOwners, getAllStudents };
