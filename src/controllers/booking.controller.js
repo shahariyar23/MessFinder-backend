@@ -69,7 +69,7 @@ const getUserBookings = asyncHandler(async (req, res) => {
     const { page = 1, limit = 10, status } = req.query;
     const skip = (page - 1) * limit;
 
-    let query = { user_id: req.user._id };
+    let query = { user_id: req.user.id };
     if (status) {
         query.bookingStatus = status;
     }
@@ -110,7 +110,7 @@ const getOwnerBookings = asyncHandler(async (req, res) => {
     const { page = 1, limit = 10, status } = req.query;
     const skip = (page - 1) * limit;
 
-    let query = { owner_id: req.user._id };
+    let query = { owner_id: req.user.id };
     if (status) {
         query.bookingStatus = status;
     }
@@ -156,8 +156,8 @@ const getBookingById = asyncHandler(async (req, res) => {
     }
 
     // Check if user has permission to view this booking
-    const isUser = booking.user_id._id.toString() === req.user._id.toString();
-    const isOwner = booking.owner_id._id.toString() === req.user._id.toString();
+    const isUser = booking.user_id._id.toString() === req.user.id.toString();
+    const isOwner = booking.owner_id._id.toString() === req.user.id.toString();
     const isAdmin = req.user.role === "admin";
 
     if (!isUser && !isOwner && !isAdmin) {
@@ -184,7 +184,7 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
     }
 
     // Check if user is the owner of the mess
-    if (booking.owner_id.toString() !== req.user._id.toString()) {
+    if (booking.owner_id.toString() !== req.user.id.toString()) {
         throw new ApiError(403, "Only the mess owner can update booking status");
     }
 
@@ -225,8 +225,8 @@ const updatePaymentStatus = asyncHandler(async (req, res) => {
     }
 
     // Check permissions
-    const isUser = booking.user_id.toString() === req.user._id.toString();
-    const isOwner = booking.owner_id.toString() === req.user._id.toString();
+    const isUser = booking.user_id.toString() === req.user.id.toString();
+    const isOwner = booking.owner_id.toString() === req.user.id.toString();
     
     if (!isUser && !isOwner) {
         throw new ApiError(403, "Access denied to update payment status");
@@ -254,7 +254,7 @@ const cancelBooking = asyncHandler(async (req, res) => {
     }
 
     // Check if user owns this booking
-    if (booking.user_id.toString() !== req.user._id.toString()) {
+    if (booking.user_id.toString() !== req.user.id.toString()) {
         throw new ApiError(403, "You can only cancel your own bookings");
     }
 
