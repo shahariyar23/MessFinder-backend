@@ -33,9 +33,11 @@ const bookingSchema = new mongoose.Schema({
         required: true
     },
    
-    // Payment Information
+    // Payment Information - UPDATED
     totalAmount: {
         type: Number,
+        min: 0,
+        default: 0,
         required: true
     },
     advanceMonths: {
@@ -44,6 +46,11 @@ const bookingSchema = new mongoose.Schema({
         min: 0,
         max: 3
     },
+    payAbleAmount: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
     paymentStatus: {
         type: String,
         enum: ["pending", "paid", "failed", "refunded"],
@@ -51,10 +58,22 @@ const bookingSchema = new mongoose.Schema({
     },
     paymentMethod: {
         type: String,
-        enum: ["cash", "card",, "bank_transfer"]
+        enum: ["cash", "card", "bank_transfer", "sslcommerz", "bkash", "nagad", "rocket"], // ADDED NEW METHODS
+        default: "cash"
     },
     transactionId: {
         type: String
+    },
+    
+    // ADD THESE NEW FIELDS FOR PAYMENT TRACKING
+    paymentInitiatedAt: {
+        type: Date
+    },
+    paidAt: {
+        type: Date
+    },
+    paymentDetails: {
+        type: mongoose.Schema.Types.Mixed // To store complete payment gateway response
     },
 
     // Tenant Information
@@ -79,7 +98,6 @@ const bookingSchema = new mongoose.Schema({
     }
 }, { timestamps: true });
 
-
-const Booking = mongoose.model("Booking", bookingSchema)
+const Booking = mongoose.model("Booking", bookingSchema);
 
 export default Booking;

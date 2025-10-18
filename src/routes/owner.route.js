@@ -2,7 +2,7 @@ import express from "express";
 const ownerRoute = express.Router();
 import ApiSuccess from "../utils/ApiSuccess.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
-import { getMessesByOwnerId, updateMessStatus } from "../controllers/owner.conteroller.js";
+import { getMessesByOwnerId, updateMessStatus } from "../controllers/owner.controller.js";
 
 ownerRoute.get("/check-auth", authMiddleware, (req, res) => {
     const user = req.user;

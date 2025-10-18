@@ -1,4 +1,3 @@
-
 import Booking from '../models/booking.model.js';
 import MessListing from '../models/messListing.model.js';
 import ApiError from '../utils/ApiError.js';
@@ -15,11 +14,12 @@ const createBooking = asyncHandler(async (req, res) => {
         tenantName,
         tenantPhone,
         tenantEmail,
+        payAbleAmount,
         emergencyContact
     } = req.body;
 
     // Validate required fields
-    if (!mess_id || !checkInDate || !tenantName || !tenantPhone || !tenantEmail) {
+    if (!mess_id || !checkInDate || !tenantName || !tenantPhone || !tenantEmail || !payAbleAmount) {
         throw new ApiError(400, "All required fields must be provided");
     }
 
@@ -43,11 +43,12 @@ const createBooking = asyncHandler(async (req, res) => {
         owner_id: mess.owner_id,
         checkInDate: new Date(checkInDate),
         totalAmount,
-        advanceMonths,
+        advanceMonths: mess.advancePaymentMonth,
         paymentMethod,
         tenantName,
         tenantPhone,
         tenantEmail,
+        payAbleAmount,
         emergencyContact,
         bookingStatus: "pending",
         paymentStatus: "pending"
@@ -60,36 +61,62 @@ const createBooking = asyncHandler(async (req, res) => {
     await booking.populate('owner_id', 'name email phone');
 
     return res.status(201).json(
-        new ApiSuccess("Booking created successfully", booking, 201)
+        new ApiSuccess(`Booking ${mess?.title} successfully`, booking, 201)
     );
 });
 
-// Get all bookings for a user
+// Get all bookings for a user with upcoming/past filtering
 const getUserBookings = asyncHandler(async (req, res) => {
-    const { page = 1, limit = 10, status } = req.query;
+    const { page = 1, limit = 10, status, type } = req.query;
     const skip = (page - 1) * limit;
+    const currentDate = new Date();
 
     let query = { user_id: req.user.id };
+    
+    // Add status filter if provided
     if (status) {
         query.bookingStatus = status;
+    }
+    
+    // Add date filter based on type (upcoming/past)
+    if (type === 'upcoming') {
+        query.checkInDate = { $gte: currentDate };
+    } else if (type === 'past') {
+        query.checkInDate = { $lt: currentDate };
     }
 
     const [bookings, totalBookings] = await Promise.all([
         Booking.find(query)
             .populate('mess_id', 'title address images payPerMonth')
             .populate('owner_id', 'name phone')
-            .sort({ createdAt: -1 })
+            .sort({ checkInDate: type === 'upcoming' ? 1 : -1 })
             .skip(skip)
             .limit(parseInt(limit))
             .lean(),
         Booking.countDocuments(query)
     ]);
+
+    // Get counts for upcoming and past bookings for frontend tabs
+    const upcomingCount = await Booking.countDocuments({
+        user_id: req.user.id,
+        checkInDate: { $gte: currentDate }
+    });
+
+    const pastCount = await Booking.countDocuments({
+        user_id: req.user.id,
+        checkInDate: { $lt: currentDate }
+    });
 
     const totalPages = Math.ceil(totalBookings / limit);
 
     return res.status(200).json(
         new ApiSuccess("Bookings retrieved successfully", {
             bookings,
+            counts: {
+                upcoming: upcomingCount,
+                past: pastCount,
+                total: totalBookings
+            },
             pagination: {
                 currentPage: parseInt(page),
                 totalPages,
@@ -101,38 +128,64 @@ const getUserBookings = asyncHandler(async (req, res) => {
     );
 });
 
-// Get all bookings for an owner
+// Get all bookings for an owner with upcoming/past filtering
 const getOwnerBookings = asyncHandler(async (req, res) => {
-    const {ownerId} = req.params;
-    console.log(ownerId);
+    const { ownerId } = req.params;
+    
     if (req.user.role !== "owner") {
         throw new ApiError(403, "Only owners can access this resource");
     }
 
-    const { page = 1, limit = 10, status } = req.query;
+    const { page = 1, limit = 10, status, type } = req.query;
     const skip = (page - 1) * limit;
+    const currentDate = new Date();
 
     let query = { owner_id: ownerId };
+    
+    // Add status filter if provided
     if (status) {
         query.bookingStatus = status;
+    }
+    
+    // Add date filter based on type (upcoming/past)
+    if (type === 'upcoming') {
+        query.checkInDate = { $gte: currentDate };
+    } else if (type === 'past') {
+        query.checkInDate = { $lt: currentDate };
     }
 
     const [bookings, totalBookings] = await Promise.all([
         Booking.find(query)
             .populate('user_id', 'name email phone')
             .populate('mess_id', 'title address')
-            .sort({ createdAt: -1 })
+            .sort({ checkInDate: type === 'upcoming' ? 1 : -1 })
             .skip(skip)
             .limit(parseInt(limit))
             .lean(),
         Booking.countDocuments(query)
     ]);
 
+    // Get counts for upcoming and past bookings for frontend tabs
+    const upcomingCount = await Booking.countDocuments({
+        owner_id: ownerId,
+        checkInDate: { $gte: currentDate }
+    });
+
+    const pastCount = await Booking.countDocuments({
+        owner_id: ownerId,
+        checkInDate: { $lt: currentDate }
+    });
+
     const totalPages = Math.ceil(totalBookings / limit);
 
     return res.status(200).json(
         new ApiSuccess("Owner bookings retrieved successfully", {
             bookings,
+            counts: {
+                upcoming: upcomingCount,
+                past: pastCount,
+                total: totalBookings
+            },
             pagination: {
                 currentPage: parseInt(page),
                 totalPages,
@@ -143,6 +196,8 @@ const getOwnerBookings = asyncHandler(async (req, res) => {
         })
     );
 });
+
+
 
 // Get single booking by ID
 const getBookingById = asyncHandler(async (req, res) => {

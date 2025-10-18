@@ -31,16 +31,18 @@ import adminRoute from './routes/admin.route.js';
 import ownerRoute from './routes/owner.route.js';
 import requestRoute from './routes/requestMessView.route.js';
 import saveRouter from './routes/saveMess.route.js';
+import paymentRoute from './routes/payment.route.js';
 
 
 app.use("/api/v1/user", userRouter);
 app.use("/api/v1/mess", messListingRoute);
 app.use("/api/v1/mess/save", saveRouter);
-app.use("/api/v1/messbook", bookingRoute);
+app.use("/api/v1/booking", bookingRoute);
 app.use("/api/v1/review", reviewRoute);
 app.use("/api/v1/admin", adminRoute);
 app.use("/api/v1/owner", ownerRoute);
 app.use("/api/v1/request", requestRoute);
+app.use("/api/v1/payment", paymentRoute);
 
 
 
