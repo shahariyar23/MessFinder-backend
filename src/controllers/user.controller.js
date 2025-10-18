@@ -6,37 +6,43 @@ import ApiError from "../utils/ApiError.js";
 import ApiSuccess from "../utils/ApiSuccess.js";
 
 
-
 const register = asyncHandler(async (req, res) => {
     const { name, email, password, phone, role } = req.body;
-    
+
     // Just throw errors - the middleware will handle them
     if (!name || !email || !password || !phone || !role) {
         throw new ApiError(400, "All fields are required");
     }
-    
+
     if (role === "admin") {
         throw new ApiError(400, "Cannot register as admin");
     }
-    
+
     const existingUser = await User.findOne({ $or: [{ email }, { phone }] });
     if (existingUser) {
         throw new ApiError(400, "User with this email or phone already exists");
     }
-    
+
     const hashedPassword = await bcrypt.hash(password, 12);
-    const newUser = new User({ name, email, password: hashedPassword, phone, role });
+    const newUser = new User({
+        name,
+        email,
+        password: hashedPassword,
+        phone,
+        role,
+    });
     await newUser.save();
-    
+
     // Remove password from response
     const userResponse = { ...newUser.toObject() };
     delete userResponse.password;
-    
-     return res.status(201).json(
-        new ApiSuccess("User registered successfully", userResponse, 201)
-    );
-});
 
+    return res
+        .status(201)
+        .json(
+            new ApiSuccess("User registered successfully", userResponse, 201)
+        );
+});
 
 const login = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
@@ -54,18 +60,24 @@ const login = asyncHandler(async (req, res) => {
 
     // Check if account is deactivated FIRST
     if (!user.isActive) {
-        throw new ApiError(403, "Your account is deactivated due to multiple failed login attempts. Please contact support.");
+        throw new ApiError(
+            403,
+            "Your account is deactivated due to multiple failed login attempts. Please contact support."
+        );
     }
 
     // Check if account is temporarily locked
     if (user.lockUntil && user.lockUntil > Date.now()) {
         const minutes = Math.ceil((user.lockUntil - Date.now()) / (60 * 1000));
-        throw new ApiError(403, `Account temporarily locked due to multiple failed login attempts. Please try again in ${minutes} minute(s).`);
+        throw new ApiError(
+            403,
+            `Account temporarily locked due to multiple failed login attempts. Please try again in ${minutes} minute(s).`
+        );
     }
 
     // Password verification
     const isPasswordValid = await bcrypt.compare(password, user.password);
-    
+
     if (!isPasswordValid) {
         // Increment failed attempts
         user.loginAttempts += 1;
@@ -81,7 +93,7 @@ const login = asyncHandler(async (req, res) => {
         }
 
         await user.save();
-        
+
         throw new ApiError(400, "Invalid email or password");
     }
 
@@ -89,15 +101,15 @@ const login = asyncHandler(async (req, res) => {
     user.loginAttempts = 0;
     user.lockUntil = null;
     user.lastLogin = new Date();
-
+    const newUser = {
+            id: user._id,
+            email: user.email,
+            name: user.name,
+            role: user.role
+    }
     // Generate JWT token
     const token = jwt.sign(
-        { 
-            id: user._id, 
-            email: user.email, 
-            name: user.name, 
-            role: user.role 
-        },
+        newUser,
         process.env.JWT_SECRET,
         { expiresIn: process.env.JWT_EXPIRE }
     );
@@ -105,31 +117,38 @@ const login = asyncHandler(async (req, res) => {
     user.accessToken = token;
     await user.save();
 
-    // Remove password from user object
-    const userWithoutPassword = { ...user.toObject() };
-    delete userWithoutPassword.password;
+    const returnUser = {
+        id: user._id,
+        name: user.name,
+        phone: user.phone,
+        role: user.role
+    }
 
     // Return response
     return res
-    .status(200)
-    .cookie("token", token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 24 * 60 * 60 * 1000
-    })
-    .json(new ApiSuccess("Login successful", { 
-        token, 
-        user: userWithoutPassword 
-    }, 200));
+        .status(200)
+        .cookie("token", token, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 24 * 60 * 60 * 1000,
+        })
+        .json(
+            new ApiSuccess(
+                "Login successful",
+                {
+                    token,
+                    user: returnUser,
+                },
+                200
+            )
+        );
 });
 
+const logout = asyncHandler((req, res) => {
+    res.clearCookie("token").json(new ApiSuccess("logout successful", 200));
+});
 
-const logout = asyncHandler((req, res)=>{
-    res.clearCookie("token").json(new ApiSuccess("logout successful", 200))
-})
-
-// controllers/authController.js
 const generateResetCode = asyncHandler(async (req, res) => {
     const { email } = req.body;
 
@@ -140,12 +159,14 @@ const generateResetCode = asyncHandler(async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) {
         // Don't reveal if email exists for security
-        return res.json(new ApiSuccess("If the email exists, a reset code has been sent"));
+        return res.json(
+            new ApiSuccess("If the email exists, a reset code has been sent")
+        );
     }
 
     // Generate 6-digit code
     const resetCode = Math.floor(100000 + Math.random() * 900000);
-    
+
     // Set expiration (10 minutes from now)
     const resetCodeExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
@@ -166,10 +187,10 @@ const verifyResetCode = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Email and reset code are required");
     }
 
-    const user = await User.findOne({ 
-        email, 
+    const user = await User.findOne({
+        email,
         resetPasswordCode: code,
-        resetPasswordExpires: { $gt: new Date() } // Check if not expired
+        resetPasswordExpires: { $gt: new Date() }, // Check if not expired
     });
 
     if (!user) {
@@ -178,17 +199,16 @@ const verifyResetCode = asyncHandler(async (req, res) => {
 
     // Code is valid - you might want to create a temporary token for password reset
     const resetToken = jwt.sign(
-        { 
-            id: user._id, 
-            purpose: 'password_reset' 
+        {
+            id: user._id,
+            purpose: "password_reset",
         },
         process.env.JWT_SECRET,
-        { expiresIn: '15m' } // Short-lived token
+        { expiresIn: "15m" } // Short-lived token
     );
 
     return res.json(new ApiSuccess("Reset code verified", { resetToken }));
 });
-
 
 const resetPassword = asyncHandler(async (req, res) => {
     const { resetToken, newPassword } = req.body;
@@ -200,8 +220,8 @@ const resetPassword = asyncHandler(async (req, res) => {
     try {
         // Verify the reset token
         const decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
-        
-        if (decoded.purpose !== 'password_reset') {
+
+        if (decoded.purpose !== "password_reset") {
             throw new ApiError(400, "Invalid reset token");
         }
 
@@ -220,38 +240,36 @@ const resetPassword = asyncHandler(async (req, res) => {
         user.loginAttempts = 0; // Reset login attempts
         user.lockUntil = undefined;
         user.isActive = true;
-        
+
         await user.save();
 
         return res.json(new ApiSuccess("Password reset successfully"));
-
     } catch (error) {
-        if (error.name === 'JsonWebTokenError') {
+        if (error.name === "JsonWebTokenError") {
             throw new ApiError(400, "Invalid or expired reset token");
         }
-        if (error.name === 'TokenExpiredError') {
+        if (error.name === "TokenExpiredError") {
             throw new ApiError(400, "Reset token has expired");
         }
         throw error;
     }
 });
 
-
 const getAllStudents = asyncHandler(async (req, res) => {
-     if (req.user.role !== "admin") {
+    if (req.user.role !== "admin") {
         throw new ApiError(403, "Only admin can see all students");
     }
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const students = await User.find({ role: 'student' })
-        .select('-password')
+    const students = await User.find({ role: "student" })
+        .select("-password")
         .skip(skip)
         .limit(limit)
         .sort({ createdAt: -1 });
 
-    const totalStudents = await User.countDocuments({ role: 'student' });
+    const totalStudents = await User.countDocuments({ role: "student" });
     const totalPages = Math.ceil(totalStudents / limit);
 
     return res.status(200).json(
@@ -262,12 +280,11 @@ const getAllStudents = asyncHandler(async (req, res) => {
                 totalPages,
                 totalStudents,
                 hasNext: page < totalPages,
-                hasPrev: page > 1
-            }
+                hasPrev: page > 1,
+            },
         })
     );
 });
-
 
 const getAllOwners = asyncHandler(async (req, res) => {
     if (req.user.role !== "admin") {
@@ -277,13 +294,13 @@ const getAllOwners = asyncHandler(async (req, res) => {
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
 
-    const students = await User.find({ role: 'owner' })
-        .select('-password')
+    const students = await User.find({ role: "owner" })
+        .select("-password")
         .skip(skip)
         .limit(limit)
         .sort({ createdAt: -1 });
 
-    const totalOwners = await User.countDocuments({ role: 'owner' });
+    const totalOwners = await User.countDocuments({ role: "owner" });
     const totalPages = Math.ceil(totalOwners / limit);
 
     return res.status(200).json(
@@ -294,11 +311,42 @@ const getAllOwners = asyncHandler(async (req, res) => {
                 totalPages,
                 totalOwners,
                 hasNext: page < totalPages,
-                hasPrev: page > 1
-            }
+                hasPrev: page > 1,
+            },
         })
     );
 });
 
+const getStudentById = asyncHandler(async (req, res)=>{
+    const {id} = req.params;
+    if(!id){
+        throw new ApiError(403, "user id is require ")
+    }
+    if(id !== req.user.id){
+        throw new ApiError(403, "only user can view his/ her own profile")
+    }
+    const user = await User.findById(id);
+    if(!user){
+        throw new ApiError(403, "user is not found")
+    }
+    const newUser = {
+        name: user.name,
+        role: user.role,
+        phone: user.phone,
+        email: user.email
+    }
+    return res.status(200).json(new ApiSuccess("user found", newUser) )
+})
 
-export { register, login, logout, generateResetCode, verifyResetCode, resetPassword, getAllOwners, getAllStudents };
+
+export {
+    register,
+    login,
+    logout,
+    generateResetCode,
+    verifyResetCode,
+    resetPassword,
+    getAllOwners,
+    getAllStudents,
+    getStudentById
+};

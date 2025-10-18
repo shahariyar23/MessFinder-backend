@@ -14,7 +14,7 @@ const bookingRoute = express.Router();
 
 bookingRoute.route("/create-booking").post(authMiddleware, createBooking);
 bookingRoute.route("/get-user-booking").get(authMiddleware, getUserBookings);
-bookingRoute.route("/get-owner-booking").get(authMiddleware, getOwnerBookings);
+bookingRoute.route("/get-owner-booking/:ownerId").get(authMiddleware, getOwnerBookings);
 bookingRoute.route("/get-booking-info/:bookingId").get(authMiddleware, getBookingById);
 bookingRoute.route("/update-booking-status/:bookingId").post(authMiddleware, updateBookingStatus);
 bookingRoute.route("/update-booking-payment-status/:bookingId").post(authMiddleware, updatePaymentStatus);

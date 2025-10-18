@@ -24,7 +24,7 @@ const messListing = new mongoose.Schema(
         },
         status: {
             type: String,
-            enum: ["booked", "in progress", "free"],
+            enum: ["booked", "in progress", "free", "pending"],
             default: "free",
             required: true,
         },
@@ -47,33 +47,25 @@ const messListing = new mongoose.Schema(
         facilities: [
             {
                 type: String,
-                enum: [
-                    "wifi",
-                    "ac",
-                    "lift",
-                    "laundry",
-                    "freezer",
-                    "waterfilter",
-                    "cctv",
-                    "power_backup",
-                    "meals",
-                ],
+                enum: ["Wi-Fi", "Meals", "Laundry", "Lifts", "Water Filter", "Freezer"],
                 require: true
             },
         ],
         roomType:{
             type: String,
-            enum:["single","shared"],
+            enum:["Single", "Shared", "Double"],
             require: true
         },
-        roomFeatures:{
-            type: String,
-            enum:["master","balcony", "non-balcony"],
-            require: true
-        },
+        roomFeatures: [
+            {
+                type: String,
+                enum: ["Master Bed", "Attached Bath", "Balcony", "Furnished", "AC", "Geyser"],
+                required: true
+            }
+        ],
         genderPreference:{
             type: String,
-            enum: ["male","female"],
+            enum: ["Male", "Female"],
             require: true
         },
         contact:{
@@ -94,10 +86,6 @@ const messListing = new mongoose.Schema(
             type: Number,
             default: 0
         },
-        review:{
-            type: Number,
-            default: 0
-        }
     },
     { timestamps: true }
 );

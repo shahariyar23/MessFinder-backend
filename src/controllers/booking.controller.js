@@ -103,6 +103,8 @@ const getUserBookings = asyncHandler(async (req, res) => {
 
 // Get all bookings for an owner
 const getOwnerBookings = asyncHandler(async (req, res) => {
+    const {ownerId} = req.params;
+    console.log(ownerId);
     if (req.user.role !== "owner") {
         throw new ApiError(403, "Only owners can access this resource");
     }
@@ -110,7 +112,7 @@ const getOwnerBookings = asyncHandler(async (req, res) => {
     const { page = 1, limit = 10, status } = req.query;
     const skip = (page - 1) * limit;
 
-    let query = { owner_id: req.user.id };
+    let query = { owner_id: ownerId };
     if (status) {
         query.bookingStatus = status;
     }
