@@ -1,11 +1,10 @@
 // controllers/paymentController.js
 import SSLCommerzPayment from 'sslcommerz-lts';
 import Booking from '../models/booking.model.js';
+import Mess from '../models/messListing.model.js';
 import ApiSuccess from '../utils/ApiSuccess.js';
 import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
-
-
 
 // Simple readable format
 const generateSimpleTransactionId = (bookingId) => {
@@ -26,6 +25,11 @@ const initiateSSLCommerzPayment = asyncHandler(async (req, res) => {
     
     if (!booking) {
         throw new ApiError(404, "Booking not found");
+    }
+
+    // Check if mess is already booked
+    if (booking.mess_id.status === 'booked') {
+        throw new ApiError(400, "This mess is already booked");
     }
 
     // Use the amount from booking instead of hardcoded 100
@@ -107,10 +111,11 @@ const initiateSSLCommerzPayment = asyncHandler(async (req, res) => {
     }
 });
 
-// Enhanced IPN Handler with better logging
+// Enhanced IPN Handler with mess status update
 const handleSSLIPN = asyncHandler(async (req, res) => {
     const paymentData = req.body;
     
+    console.log('SSL IPN Received - Full body:', req.body);
     console.log('SSL IPN Received:', {
         transactionId: paymentData.tran_id,
         status: paymentData.status,
@@ -121,29 +126,56 @@ const handleSSLIPN = asyncHandler(async (req, res) => {
     try {
         // Validate the payment
         if (paymentData.status === 'VALID') {
-            const booking = await Booking.findOne({ transactionId: paymentData.tran_id });
+            const booking = await Booking.findOne({ transactionId: paymentData.tran_id }).populate('mess_id');
             
             if (booking) {
-                booking.paymentStatus = 'paid';
-                booking.paymentDetails = paymentData;
-                booking.paidAt = new Date();
-                
-                // If payment is successful, update booking status to confirmed
-                if (booking.bookingStatus === 'pending') {
-                    booking.bookingStatus = 'confirmed';
+                // Start a session for transaction to ensure data consistency
+                const session = await Booking.startSession();
+                session.startTransaction();
+
+                try {
+                    // Update booking status
+                    booking.paymentStatus = "paid";
+                    booking.paymentDetails = paymentData;
+                    booking.paidAt = new Date();
+                    
+                    // If payment is successful, update booking status to confirmed
+                    if (booking.bookingStatus === "pending") {
+                        booking.bookingStatus = "confirmed";
+                    }
+                    
+                    await booking.save({ session });
+
+                    // Update mess status to 'booked'
+                    const mess = await Mess.findById(booking.mess_id._id);
+                    if (mess) {
+                        mess.status = 'booked';
+                        mess.availability = false; // Also update availability flag if exists
+                        mess.lastBookedAt = new Date();
+                        await mess.save({ session });
+                    }
+
+                    // Commit the transaction
+                    await session.commitTransaction();
+                    session.endSession();
+
+                    console.log('✅ Payment verified and booking updated:', {
+                        transactionId: paymentData.tran_id,
+                        bookingId: booking._id,
+                        status: 'paid',
+                        messStatus: 'booked'
+                    });
+
+                    // You can add email notification or other actions here
+
+                } catch (error) {
+                    // If any error occurs, abort the transaction
+                    await session.abortTransaction();
+                    session.endSession();
+                    throw error;
                 }
-                
-                await booking.save();
-
-                console.log('Payment verified and booking updated:', {
-                    transactionId: paymentData.tran_id,
-                    bookingId: booking._id,
-                    status: 'paid'
-                });
-
-                // You can add email notification or other actions here
             } else {
-                console.warn('Booking not found for transaction:', paymentData.tran_id);
+                console.warn(' Booking not found for transaction:', paymentData.tran_id);
             }
         } else if (paymentData.status === 'FAILED') {
             const booking = await Booking.findOne({ transactionId: paymentData.tran_id });
@@ -152,7 +184,7 @@ const handleSSLIPN = asyncHandler(async (req, res) => {
                 booking.paymentDetails = paymentData;
                 await booking.save();
                 
-                console.log('Payment failed:', paymentData.tran_id);
+                console.log('💔 Payment failed:', paymentData.tran_id);
             }
         }
 
@@ -161,23 +193,99 @@ const handleSSLIPN = asyncHandler(async (req, res) => {
             transactionId: paymentData.tran_id 
         });
     } catch (error) {
-        console.error('IPN Processing Error:', error);
-        res.status(500).json({ 
-            status: 'IPN processing failed',
+        console.error(' IPN Processing Error:', error);
+        res.status(200).json({ 
+            status: 'IPN received but processing failed',
             error: error.message 
         });
     }
 });
 
-// Enhanced Validate Payment with better response
+// Auto-confirm payment for development with mess status update
+const autoConfirmPayment = asyncHandler(async (req, res) => {
+    const { transactionId } = req.body;
+
+    console.log(' Auto-confirming payment:', transactionId);
+
+    try {
+        const booking = await Booking.findOne({ transactionId }).populate('mess_id');
+        
+        if (!booking) {
+            throw new ApiError(404, "Booking not found");
+        }
+
+        // Only auto-confirm if payment was initiated but not completed
+        if (booking.paymentStatus === 'pending' && booking.transactionId) {
+            // Start a session for transaction to ensure data consistency
+            const session = await Booking.startSession();
+            session.startTransaction();
+
+            try {
+                // Update booking
+                booking.paymentStatus = 'paid';
+                booking.bookingStatus = 'confirmed';
+                booking.paidAt = new Date();
+                booking.paymentDetails = {
+                    auto_confirmed: true,
+                    confirmed_at: new Date(),
+                    reason: 'IPN not received - auto confirmed via frontend',
+                    tran_id: transactionId,
+                    status: 'VALID',
+                    amount: booking.payAbleAmount,
+                    currency: 'BDT'
+                };
+                
+                await booking.save({ session });
+
+                // Update mess status to 'booked'
+                const mess = await Mess.findById(booking.mess_id._id);
+                if (mess) {
+                    mess.status = 'booked';
+                    mess.availability = false; // Also update availability flag if exists
+                    mess.lastBookedAt = new Date();
+                    await mess.save({ session });
+                }
+
+                // Commit the transaction
+                await session.commitTransaction();
+                session.endSession();
+                
+                console.log('✅ Auto-confirmed payment and updated mess status:', {
+                    transactionId: transactionId,
+                    messId: booking.mess_id._id,
+                    messStatus: 'booked'
+                });
+
+            } catch (error) {
+                // If any error occurs, abort the transaction
+                await session.abortTransaction();
+                session.endSession();
+                throw error;
+            }
+        }
+
+        return res.status(200).json(
+            new ApiSuccess("Payment auto-confirmed", {
+                paymentStatus: booking.paymentStatus,
+                bookingStatus: booking.bookingStatus,
+                transactionId: transactionId,
+                messStatus: 'booked'
+            })
+        );
+    } catch (error) {
+        console.error('Auto-confirm Error:', error);
+        throw new ApiError(500, "Failed to auto-confirm payment: " + error.message);
+    }
+});
+
+// Validate Payment function
 const validatePayment = asyncHandler(async (req, res) => {
     const { transactionId } = req.params;
     
-    console.log('Validating payment:', transactionId);
-    
     const booking = await Booking.findOne({ transactionId })
-        .populate('mess_id', 'title address')
-        .populate('user_id', 'name email');
+        .populate('mess_id', 'title address payPerMonth status')
+        .populate('user_id', 'name email phone')
+        .populate('owner_id', 'name phone');
 
     if (!booking) {
         throw new ApiError(404, "Transaction not found");
@@ -190,11 +298,17 @@ const validatePayment = asyncHandler(async (req, res) => {
         amount: booking.payAbleAmount || booking.totalAmount,
         bookingId: booking._id,
         messName: booking.mess_id?.title,
+        messStatus: booking.mess_id?.status, // Include mess status in response
+        monthlyRent: booking.mess_id?.payPerMonth,
         customerName: booking.tenantName,
+        customerEmail: booking.tenantEmail,
+        customerPhone: booking.tenantPhone,
+        bookingDate: booking.bookingDate,
+        checkInDate: booking.checkInDate,
+        advanceMonths: booking.advanceMonths,
+        paymentMethod: booking.paymentMethod,
         paidAt: booking.paidAt
     };
-
-    console.log('Payment validation result:', response);
 
     return res.status(200).json(
         new ApiSuccess("Payment status retrieved successfully", response)
@@ -204,5 +318,6 @@ const validatePayment = asyncHandler(async (req, res) => {
 export {
     initiateSSLCommerzPayment,
     handleSSLIPN,
-    validatePayment
+    validatePayment,
+    autoConfirmPayment
 };
