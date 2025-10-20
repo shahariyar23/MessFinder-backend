@@ -24,6 +24,8 @@
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.19.1",
     "multer": "^2.0.2",
+    "nodemailer": "^7.0.9",
+    "pdfkit": "^0.17.2",
     "sslcommerz-lts": "^1.2.0"
   }
 }

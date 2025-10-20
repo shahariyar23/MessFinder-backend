@@ -123,8 +123,7 @@ const updateMess = asyncHandler(async (req, res) => {
         roomType,
         roomFeatures,
         genderPreference,
-        contact,
-        status,
+        contact
     } = req.body;
 
     // Check if mess exists
@@ -185,7 +184,7 @@ const updateMess = asyncHandler(async (req, res) => {
         roomFeatures,
         genderPreference,
         contact: contact.trim(),
-        status: status || existingMess.status, // Use existing status if not provided
+        status: existingMess.status,
         updatedAt: new Date(),
     };
 

@@ -4,6 +4,15 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import ApiError from "../utils/ApiError.js";
 import ApiSuccess from "../utils/ApiSuccess.js";
+import {
+    sendPasswordResetCode,
+    sendPasswordResetSuccess,
+    sendWelcomeEmail
+} from "../utils/service/emailService.js";
+
+
+
+
 
 
 const register = asyncHandler(async (req, res) => {
@@ -32,6 +41,8 @@ const register = asyncHandler(async (req, res) => {
         role,
     });
     await newUser.save();
+
+    await sendWelcomeEmail(newUser.email, newUser.name)
 
     // Remove password from response
     const userResponse = { ...newUser.toObject() };
@@ -150,11 +161,24 @@ const logout = asyncHandler((req, res) => {
 });
 
 const generateResetCode = asyncHandler(async (req, res) => {
-    const { email } = req.body;
+    let { email } = req.body;
 
-    if (!email) {
-        throw new ApiError(400, "Email is required");
+    console.log('Received email:', email);
+    console.log('Type of email:', typeof email);
+
+    // Extract email from nested object if needed
+    if (email && typeof email === 'object' && email.email) {
+        console.log('Extracting email from nested object...');
+        email = email.email;
     }
+
+    // Final validation
+    if (!email || typeof email !== 'string') {
+        throw new ApiError(400, "Valid email address is required");
+    }
+
+    // Clean the email
+    email = email.trim().toLowerCase();
 
     const user = await User.findOne({ email });
     if (!user) {
@@ -166,20 +190,36 @@ const generateResetCode = asyncHandler(async (req, res) => {
 
     // Generate 6-digit code
     const resetCode = Math.floor(100000 + Math.random() * 900000);
-
-    // Set expiration (10 minutes from now)
     const resetCodeExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
     user.resetPasswordCode = resetCode;
     user.resetPasswordExpires = resetCodeExpiry;
     await user.save();
 
-    // TODO: Send email with reset code
-    console.log(`Reset code for ${email}: ${resetCode}`); // Remove in production
+    try {
+        await sendPasswordResetCode(email, {
+            name: user.name || user.username || 'User',
+            verificationCode: resetCode,
+            expiryTime: '10 minutes'
+        });
 
-    return res.json(new ApiSuccess("Reset code sent to your email"));
+        console.log(`Reset code sent to ${email}: ${resetCode}`);
+
+        return res.json(
+            new ApiSuccess("Password reset code has been sent to your email")
+        );
+
+    } catch (emailError) {
+        console.error('Failed to send reset code email:', emailError);
+        
+        // Clear the reset code if email fails
+        user.resetPasswordCode = undefined;
+        user.resetPasswordExpires = undefined;
+        await user.save();
+
+        throw new ApiError(500, "Failed to send reset code. Please try again.");
+    }
 });
-
 const verifyResetCode = asyncHandler(async (req, res) => {
     const { email, code } = req.body;
 
@@ -211,48 +251,45 @@ const verifyResetCode = asyncHandler(async (req, res) => {
 });
 
 const resetPassword = asyncHandler(async (req, res) => {
-    const { resetToken, newPassword } = req.body;
+    const { email, code, newPassword } = req.body;
 
-    if (!resetToken || !newPassword) {
-        throw new ApiError(400, "Reset token and new password are required");
+    if (!email || !code || !newPassword) {
+        throw new ApiError(400, "Email, reset code and new password are required");
     }
 
+    if (newPassword.length < 6) {
+        throw new ApiError(400, "Password must be at least 6 characters long");
+    }
+    
+    const user = await User.findOne({ 
+        email,
+        resetPasswordCode: code,
+        resetPasswordExpires: { $gt: new Date() }
+    });
+
+    if (!user) {
+        throw new ApiError(400, "Invalid or expired reset code");
+    }
+const hashedPassword = await bcrypt.hash(newPassword, 12);
+    // Update password
+    user.password = hashedPassword;
+    user.resetPasswordCode = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    // Send password reset success email
     try {
-        // Verify the reset token
-        const decoded = jwt.verify(resetToken, process.env.JWT_SECRET);
-
-        if (decoded.purpose !== "password_reset") {
-            throw new ApiError(400, "Invalid reset token");
-        }
-
-        const user = await User.findById(decoded.id);
-        if (!user) {
-            throw new ApiError(400, "User not found");
-        }
-
-        // Hash new password
-        const hashedPassword = await bcrypt.hash(newPassword, 12);
-
-        // Update password and clear reset fields
-        user.password = hashedPassword;
-        user.resetPasswordCode = undefined;
-        user.resetPasswordExpires = undefined;
-        user.loginAttempts = 0; // Reset login attempts
-        user.lockUntil = undefined;
-        user.isActive = true;
-
-        await user.save();
-
-        return res.json(new ApiSuccess("Password reset successfully"));
-    } catch (error) {
-        if (error.name === "JsonWebTokenError") {
-            throw new ApiError(400, "Invalid or expired reset token");
-        }
-        if (error.name === "TokenExpiredError") {
-            throw new ApiError(400, "Reset token has expired");
-        }
-        throw error;
+        await sendPasswordResetSuccess(email, {
+            name: user.name || user.username || 'User'
+        });
+    } catch (emailError) {
+        console.error('Failed to send reset success email:', emailError);
+        // Don't throw error, just log it
     }
+
+    return res.json(
+        new ApiSuccess("Password reset successfully")
+    );
 });
 
 const getAllStudents = asyncHandler(async (req, res) => {

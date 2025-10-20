@@ -1,8 +1,13 @@
-import Booking from '../models/booking.model.js';
-import MessListing from '../models/messListing.model.js';
-import ApiError from '../utils/ApiError.js';
-import ApiSuccess from '../utils/ApiSuccess.js';
-import asyncHandler from '../utils/asyncHandler.js';
+import Booking from "../models/booking.model.js";
+import User from "../models/user.model.js"
+import MessListing from "../models/messListing.model.js";
+import ApiError from "../utils/ApiError.js";
+import ApiSuccess from "../utils/ApiSuccess.js";
+import asyncHandler from "../utils/asyncHandler.js";
+import {
+    sendBookingConfirmation,
+    sendOwnerNotification,
+} from "../utils/service/emailService.js";
 
 // Create a new booking
 const createBooking = asyncHandler(async (req, res) => {
@@ -29,8 +34,8 @@ const createBooking = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Mess not found");
     }
 
-    if (mess.status === "booked") {
-        throw new ApiError(400, "This mess is already booked");
+    if (mess.status !== "free") {
+        throw new ApiError(400, `This mess is already ${MessListing?.status}`);
     }
 
     // Calculate total amount
@@ -43,7 +48,7 @@ const createBooking = asyncHandler(async (req, res) => {
         owner_id: mess.owner_id,
         checkInDate: new Date(checkInDate),
         totalAmount,
-        advanceMonths: mess.advancePaymentMonth,
+        advanceMonths: advanceMonths,
         paymentMethod,
         tenantName,
         tenantPhone,
@@ -56,12 +61,43 @@ const createBooking = asyncHandler(async (req, res) => {
 
     await booking.save();
 
+    
+    await MessListing.findByIdAndUpdate(mess_id, {
+        status: "pending"
+    });
+
+    
+    await sendBookingConfirmation(tenantEmail, {
+        tenantName,
+        messName: mess.title,
+        address: mess.address,
+        checkInDate: booking.checkInDate,
+        transactionId: booking._id,
+        amount: booking.totalAmount,
+        paymentStatus: booking.paymentStatus,
+        bookingStatus: booking.bookingStatus,
+        bookingLink: `${process.env.FRONTEND_URL}/bookings/${booking._id}`
+    });
+    
+    
+    // You need to fetch owner email first - you'll need to import User model
+    const owner = await User.findById(mess.owner_id); 
+    if (owner && owner.email) {
+        await sendOwnerNotification(owner.email, {
+            messName: mess.title,
+            tenantName: booking.tenantName,
+            checkInDate: booking.checkInDate,
+            amount: booking.totalAmount,
+            tenantEmail: booking.tenantEmail
+        });
+    }
+
     // Populate references for response
     await booking.populate('mess_id', 'title address payPerMonth facilities');
     await booking.populate('owner_id', 'name email phone');
 
     return res.status(201).json(
-        new ApiSuccess(`Booking ${mess?.title} successfully`, booking, 201)
+        new ApiSuccess(`Booking for ${mess?.title} created successfully`, booking, 201)
     );
 });
 
@@ -72,39 +108,39 @@ const getUserBookings = asyncHandler(async (req, res) => {
     const currentDate = new Date();
 
     let query = { user_id: req.user.id };
-    
+
     // Add status filter if provided
     if (status) {
         query.bookingStatus = status;
     }
-    
+
     // Add date filter based on type (upcoming/past)
-    if (type === 'upcoming') {
+    if (type === "upcoming") {
         query.checkInDate = { $gte: currentDate };
-    } else if (type === 'past') {
+    } else if (type === "past") {
         query.checkInDate = { $lt: currentDate };
     }
 
     const [bookings, totalBookings] = await Promise.all([
         Booking.find(query)
-            .populate('mess_id', 'title address images payPerMonth')
-            .populate('owner_id', 'name phone')
-            .sort({ checkInDate: type === 'upcoming' ? 1 : -1 })
+            .populate("mess_id", "title address images payPerMonth")
+            .populate("owner_id", "name phone")
+            .sort({ checkInDate: type === "upcoming" ? 1 : -1 })
             .skip(skip)
             .limit(parseInt(limit))
             .lean(),
-        Booking.countDocuments(query)
+        Booking.countDocuments(query),
     ]);
 
     // Get counts for upcoming and past bookings for frontend tabs
     const upcomingCount = await Booking.countDocuments({
         user_id: req.user.id,
-        checkInDate: { $gte: currentDate }
+        checkInDate: { $gte: currentDate },
     });
 
     const pastCount = await Booking.countDocuments({
         user_id: req.user.id,
-        checkInDate: { $lt: currentDate }
+        checkInDate: { $lt: currentDate },
     });
 
     const totalPages = Math.ceil(totalBookings / limit);
@@ -115,15 +151,15 @@ const getUserBookings = asyncHandler(async (req, res) => {
             counts: {
                 upcoming: upcomingCount,
                 past: pastCount,
-                total: totalBookings
+                total: totalBookings,
             },
             pagination: {
                 currentPage: parseInt(page),
                 totalPages,
                 totalBookings,
                 hasNext: page < totalPages,
-                hasPrev: page > 1
-            }
+                hasPrev: page > 1,
+            },
         })
     );
 });
@@ -131,7 +167,7 @@ const getUserBookings = asyncHandler(async (req, res) => {
 // Get all bookings for an owner with upcoming/past filtering
 const getOwnerBookings = asyncHandler(async (req, res) => {
     const { ownerId } = req.params;
-    
+
     if (req.user.role !== "owner") {
         throw new ApiError(403, "Only owners can access this resource");
     }
@@ -141,39 +177,39 @@ const getOwnerBookings = asyncHandler(async (req, res) => {
     const currentDate = new Date();
 
     let query = { owner_id: ownerId };
-    
+
     // Add status filter if provided
     if (status) {
         query.bookingStatus = status;
     }
-    
+
     // Add date filter based on type (upcoming/past)
-    if (type === 'upcoming') {
+    if (type === "upcoming") {
         query.checkInDate = { $gte: currentDate };
-    } else if (type === 'past') {
+    } else if (type === "past") {
         query.checkInDate = { $lt: currentDate };
     }
 
     const [bookings, totalBookings] = await Promise.all([
         Booking.find(query)
-            .populate('user_id', 'name email phone')
-            .populate('mess_id', 'title address')
-            .sort({ checkInDate: type === 'upcoming' ? 1 : -1 })
+            .populate("user_id", "name email phone")
+            .populate("mess_id", "title address")
+            .sort({ checkInDate: type === "upcoming" ? 1 : -1 })
             .skip(skip)
             .limit(parseInt(limit))
             .lean(),
-        Booking.countDocuments(query)
+        Booking.countDocuments(query),
     ]);
 
     // Get counts for upcoming and past bookings for frontend tabs
     const upcomingCount = await Booking.countDocuments({
         owner_id: ownerId,
-        checkInDate: { $gte: currentDate }
+        checkInDate: { $gte: currentDate },
     });
 
     const pastCount = await Booking.countDocuments({
         owner_id: ownerId,
-        checkInDate: { $lt: currentDate }
+        checkInDate: { $lt: currentDate },
     });
 
     const totalPages = Math.ceil(totalBookings / limit);
@@ -184,29 +220,27 @@ const getOwnerBookings = asyncHandler(async (req, res) => {
             counts: {
                 upcoming: upcomingCount,
                 past: pastCount,
-                total: totalBookings
+                total: totalBookings,
             },
             pagination: {
                 currentPage: parseInt(page),
                 totalPages,
                 totalBookings,
                 hasNext: page < totalPages,
-                hasPrev: page > 1
-            }
+                hasPrev: page > 1,
+            },
         })
     );
 });
-
-
 
 // Get single booking by ID
 const getBookingById = asyncHandler(async (req, res) => {
     const { bookingId } = req.params;
 
     const booking = await Booking.findById(bookingId)
-        .populate('user_id', 'name email phone')
-        .populate('owner_id', 'name email phone')
-        .populate('mess_id', 'title address payPerMonth facilities images');
+        .populate("user_id", "name email phone")
+        .populate("owner_id", "name email phone")
+        .populate("mess_id", "title address payPerMonth facilities images");
 
     if (!booking) {
         throw new ApiError(404, "Booking not found");
@@ -221,9 +255,9 @@ const getBookingById = asyncHandler(async (req, res) => {
         throw new ApiError(403, "Access denied to this booking");
     }
 
-    return res.status(200).json(
-        new ApiSuccess("Booking retrieved successfully", booking)
-    );
+    return res
+        .status(200)
+        .json(new ApiSuccess("Booking retrieved successfully", booking));
 });
 
 // Update booking status (Owner only)
@@ -242,7 +276,10 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
 
     // Check if user is the owner of the mess
     if (booking.owner_id.toString() !== req.user.id.toString()) {
-        throw new ApiError(403, "Only the mess owner can update booking status");
+        throw new ApiError(
+            403,
+            "Only the mess owner can update booking status"
+        );
     }
 
     // Update booking status
@@ -251,20 +288,24 @@ const updateBookingStatus = asyncHandler(async (req, res) => {
 
     // If booking is confirmed, update mess status
     if (bookingStatus === "confirmed") {
-        await MessListing.findByIdAndUpdate(booking.mess_id, { status: "booked" });
+        await MessListing.findByIdAndUpdate(booking.mess_id, {
+            status: "booked",
+        });
     }
 
     // If booking is cancelled or rejected, make mess available again
     if (bookingStatus === "cancelled" || bookingStatus === "rejected") {
-        await MessListing.findByIdAndUpdate(booking.mess_id, { status: "free" });
+        await MessListing.findByIdAndUpdate(booking.mess_id, {
+            status: "free",
+        });
     }
 
-    await booking.populate('user_id', 'name email');
-    await booking.populate('mess_id', 'title');
+    await booking.populate("user_id", "name email");
+    await booking.populate("mess_id", "title");
 
-    return res.status(200).json(
-        new ApiSuccess(`Booking ${bookingStatus} successfully`, booking)
-    );
+    return res
+        .status(200)
+        .json(new ApiSuccess(`Booking ${bookingStatus} successfully`, booking));
 });
 
 // Update payment status
@@ -284,7 +325,7 @@ const updatePaymentStatus = asyncHandler(async (req, res) => {
     // Check permissions
     const isUser = booking.user_id.toString() === req.user.id.toString();
     const isOwner = booking.owner_id.toString() === req.user.id.toString();
-    
+
     if (!isUser && !isOwner) {
         throw new ApiError(403, "Access denied to update payment status");
     }
@@ -296,9 +337,9 @@ const updatePaymentStatus = asyncHandler(async (req, res) => {
 
     await booking.save();
 
-    return res.status(200).json(
-        new ApiSuccess("Payment status updated successfully", booking)
-    );
+    return res
+        .status(200)
+        .json(new ApiSuccess("Payment status updated successfully", booking));
 });
 
 // Cancel booking (User only)
@@ -330,9 +371,9 @@ const cancelBooking = asyncHandler(async (req, res) => {
     // Make mess available again
     await MessListing.findByIdAndUpdate(booking.mess_id, { status: "free" });
 
-    return res.status(200).json(
-        new ApiSuccess("Booking cancelled successfully", booking)
-    );
+    return res
+        .status(200)
+        .json(new ApiSuccess("Booking cancelled successfully", booking));
 });
 
 // Delete booking (Admin only)
@@ -348,9 +389,7 @@ const deleteBooking = asyncHandler(async (req, res) => {
         throw new ApiError(404, "Booking not found");
     }
 
-    return res.status(200).json(
-        new ApiSuccess("Booking deleted successfully")
-    );
+    return res.status(200).json(new ApiSuccess("Booking deleted successfully"));
 });
 
 export {
@@ -361,5 +400,5 @@ export {
     updateBookingStatus,
     updatePaymentStatus,
     cancelBooking,
-    deleteBooking
+    deleteBooking,
 };

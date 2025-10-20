@@ -10,7 +10,7 @@ ownerRoute.get("/check-auth", authMiddleware, (req, res) => {
 });
 
 ownerRoute.route("/get-all-messes/:ownerId").get(authMiddleware, getMessesByOwnerId);
-ownerRoute.route("/update-mess-status").post(authMiddleware, updateMessStatus);
+ownerRoute.route("/update-mess-status").put(authMiddleware, updateMessStatus);
 
 
 
