@@ -123,8 +123,9 @@ const updateMess = asyncHandler(async (req, res) => {
         roomType,
         roomFeatures,
         genderPreference,
-        contact
-    } = req.body;
+        contact,
+    } = req.body?.updateData;
+    console.log(req.body);
 
     // Check if mess exists
     const existingMess = await MessListing.findById(messId);
@@ -144,22 +145,6 @@ const updateMess = asyncHandler(async (req, res) => {
     }
 
     // Validation checks
-    const errors = [];
-    if (!title?.trim()) errors.push("Title is required");
-    if (!description?.trim()) errors.push("Description is required");
-    if (description?.trim().length < 6)
-        errors.push("Description must be at least 6 characters");
-    if (!address?.trim()) errors.push("Address is required");
-    if (!availableFrom) errors.push("Available from date is required");
-    if (!payPerMonth) errors.push("Pay per month is required");
-    if (!roomType) errors.push("Room type is required");
-    if (!roomFeatures) errors.push("Room features are required");
-    if (!genderPreference) errors.push("Gender preference is required");
-    if (!contact?.trim()) errors.push("Contact information is required");
-
-    if (errors.length > 0) {
-        throw new ApiError(400, "Validation failed", errors);
-    }
 
     // Parse facilities if it's a string
     let facilitiesArray = facilities;
@@ -173,18 +158,37 @@ const updateMess = asyncHandler(async (req, res) => {
 
     // Prepare update data
     const updateData = {
-        title: title.trim(),
-        description: description.trim(),
-        address: address.trim(),
-        availableFrom: new Date(availableFrom),
-        advancePaymentMonth: parseInt(advancePaymentMonth) || 1,
-        payPerMonth: parseFloat(payPerMonth),
-        facilities: facilitiesArray,
-        roomType,
-        roomFeatures,
-        genderPreference,
-        contact: contact.trim(),
-        status: existingMess.status,
+        title: title !== undefined ? title.trim() : existingMess.title,
+        description:
+            description !== undefined
+                ? description.trim()
+                : existingMess.description,
+        address: address !== undefined ? address.trim() : existingMess.address,
+        availableFrom:
+            availableFrom !== undefined
+                ? new Date(availableFrom)
+                : new Date(existingMess.availableFrom),
+        advancePaymentMonth:
+            advancePaymentMonth !== undefined
+                ? parseInt(advancePaymentMonth)
+                : parseInt(existingMess.advancePaymentMonth),
+        payPerMonth:
+            payPerMonth !== undefined ? payPerMonth : existingMess.payPerMonth,
+        facilities:
+            facilitiesArray !== undefined
+                ? facilitiesArray
+                : existingMess.facilities,
+        roomType: roomType !== undefined ? roomType : existingMess.roomType,
+        roomFeatures:
+            roomFeatures !== undefined
+                ? roomFeatures
+                : existingMess.roomFeatures,
+        genderPreference:
+            genderPreference !== undefined
+                ? genderPreference
+                : existingMess.genderPreference,
+        contact: contact !== undefined ? contact.trim() : existingMess.contact,
+        status: existingMess.status, // Keep existing status unless explicitly changed
         updatedAt: new Date(),
     };
 
@@ -393,16 +397,17 @@ const messInfoWithView = asyncHandler(async (req, res) => {
     }
 
     // Check if we need to increment view count
-    const shouldIncrementView = existingMess.owner_id._id.toString() !== req.user.id;
-    
+    const shouldIncrementView =
+        existingMess.owner_id._id.toString() !== req.user.id;
+
     let viewCount = existingMess.view || 0;
 
     if (shouldIncrementView) {
         // Increment view count in database and get the updated value
         const updatedMess = await MessListing.findByIdAndUpdate(
-            id, 
+            id,
             { $inc: { view: 1 } },
-            { new: true, select: 'view' } // Only return the view field
+            { new: true, select: "view" } // Only return the view field
         );
         viewCount = updatedMess.view;
     }
