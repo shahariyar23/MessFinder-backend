@@ -1,5 +1,5 @@
 import transporter from '../emailService.js';
-import { getBookingConfirmationTemplate, getOwnerNotificationTemplate, getPasswordResetSuccessTemplate, getPasswordResetTemplate, getPaymentSuccessTemplate } from '../emailTemplates.js';
+import { getAccountDeactivatedTemplate, getBookingConfirmationTemplate, getOwnerNotificationTemplate, getPasswordResetSuccessTemplate, getPasswordResetTemplate, getPaymentSuccessTemplate, getStatusUpdateTemplate } from '../emailTemplates.js';
 import path from 'path';
 import fs from 'fs';
 import { generatePaymentReceiptPDF } from '../paymentPDFGenerator.js';
@@ -145,7 +145,6 @@ export const sendPasswordResetCode = async (userEmail, userData) => {
 };
 
 
-// In your emailService.js
 export const sendPasswordResetSuccess = async (userEmail, userData) => {
   try {
     const mailOptions = {
@@ -160,6 +159,57 @@ export const sendPasswordResetSuccess = async (userEmail, userData) => {
     return result;
   } catch (error) {
     console.error('Error sending password reset success email:', error);
+    throw error;
+  }
+};
+
+
+export const sendStatusUpdateEmail = async (userEmail, requestData) => {
+    try {
+      const { userName, messTitle, newStatus } = requestData;
+      
+      const subject = getStatusUpdateSubject(newStatus, messTitle);
+      
+      const mailOptions = {
+        from: `"MessFinder" <${process.env.EMAIL_USER}>`,
+        to: userEmail,
+        subject: subject,
+        html: getStatusUpdateTemplate(requestData),
+      };
+
+      const result = await transporter.sendMail(mailOptions);
+      console.log('Status update email sent:', result.messageId);
+      return result;
+    } catch (error) {
+      console.error('Error sending status update email:', error);
+      throw error;
+    }
+};
+
+const getStatusUpdateSubject = (status, messTitle) => {
+  const subjectMap = {
+    accepted: `🎉 Viewing Request Accepted - ${messTitle}`,
+    rejected: `Update on Your Viewing Request - ${messTitle}`,
+    pending: `Viewing Request Status Update - ${messTitle}`
+  };
+  
+  return subjectMap[status] || `Viewing Request Update - ${messTitle}`;
+};
+
+export const sendAccountDeactivatedNotification = async (userEmail, userData) => {
+  try {
+    const mailOptions = {
+      from: `"MessFinder Security" <${process.env.EMAIL_USER}>`,
+      to: userEmail,
+      subject: '🚫 Account Deactivated - Security Alert',
+      html: getAccountDeactivatedTemplate(userData),
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+    console.log('Account deactivated notification sent:', result.messageId);
+    return result;
+  } catch (error) {
+    console.error('Error sending account deactivated notification:', error);
     throw error;
   }
 };

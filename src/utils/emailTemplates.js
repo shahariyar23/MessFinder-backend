@@ -176,8 +176,9 @@ export const getPasswordResetSuccessTemplate = (userData) => {
 };
 
 
-// Account lock mail tamplate
 export const getAccountLockedTemplate = (userData) => {
+  const unlockTime = new Date(userData.lockUntil).toLocaleString();
+  
   return `
     <!DOCTYPE html>
     <html>
@@ -189,11 +190,12 @@ export const getAccountLockedTemplate = (userData) => {
         .alert-box { background: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0; }
         .footer { background: #64748b; color: white; padding: 15px; text-align: center; }
         .button { background: #ef4444; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin: 5px; }
+        .info-box { background: #f8fafc; padding: 15px; border-radius: 6px; margin: 15px 0; }
       </style>
     </head>
     <body>
       <div class="header">
-        <h1>🚫 Account Temporarily Locked</h1>
+        <h1>🔒 Account Temporarily Locked</h1>
         <p>MessFinder - Security Alert</p>
       </div>
       
@@ -202,31 +204,104 @@ export const getAccountLockedTemplate = (userData) => {
         
         <div class="alert-box">
           <h3>⚠️ Important Security Notice</h3>
-          <p>Your MessFinder account has been temporarily locked due to multiple failed login attempts or suspicious activity.</p>
+          <p>Your MessFinder account has been temporarily locked due to multiple failed login attempts.</p>
         </div>
         
-        <p><strong>Reason:</strong> ${userData.lockReason || 'Multiple failed authentication attempts'}</p>
-        <p><strong>Locked Until:</strong> ${new Date(userData.lockUntil).toLocaleString()}</p>
+        <div class="info-box">
+          <p><strong>Reason:</strong> ${userData.lockReason || 'Multiple failed authentication attempts'}</p>
+          <p><strong>Locked Until:</strong> ${unlockTime}</p>
+          <p><strong>Failed Attempts:</strong> ${userData.loginAttempts}</p>
+          <p><strong>Lock Duration:</strong> ${userData.lockDuration}</p>
+        </div>
         
-        <p>To regain access to your account, you can:</p>
+        <p>This is a security measure to protect your account from unauthorized access.</p>
+        
+        <p><strong>What you can do:</strong></p>
         <ul>
           <li>Wait for the lock period to expire automatically</li>
-          <li>Reset your password using the link below</li>
-          <li>Contact our support team for immediate assistance</li>
+          <li>Use the "Forgot Password" feature to reset your password</li>
+          <li>Contact our support team if you believe this is an error</li>
         </ul>
         
         <div style="text-align: center; margin: 25px 0;">
-          <a href="${process.env.FRONTEND_URL}/reset-password" class="button">Reset Password</a>
+          <a href="${process.env.FRONTEND_URL}/forgot-password" class="button">Reset Password</a>
           <a href="mailto:support@messfinder.com" class="button" style="background: #64748b;">Contact Support</a>
         </div>
         
-        <p>If you believe this is an error, please contact our support team immediately.</p>
+        <p style="color: #ef4444; font-weight: bold;">
+          If you did not attempt to log in, please contact our support team immediately as your account may be compromised.
+        </p>
       </div>
       
       <div class="footer">
         <p>Security Team - MessFinder</p>
         <p>Email: support@messfinder.com | Phone: +880 XXXX-XXXXXX</p>
-        <p>© 2025 MessFinder. All rights reserved.</p>
+        <p>© 2024 MessFinder. All rights reserved.</p>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+export const getAccountDeactivatedTemplate = (userData) => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+        .header { background: linear-gradient(135deg, #dc2626, #b91c1c); color: white; padding: 20px; text-align: center; }
+        .content { padding: 20px; }
+        .alert-box { background: #fef2f2; border-left: 4px solid #dc2626; padding: 15px; margin: 20px 0; }
+        .footer { background: #64748b; color: white; padding: 15px; text-align: center; }
+        .button { background: #dc2626; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin: 5px; }
+        .info-box { background: #f8fafc; padding: 15px; border-radius: 6px; margin: 15px 0; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>🚫 Account Deactivated</h1>
+        <p>MessFinder - Security Alert</p>
+      </div>
+      
+      <div class="content">
+        <h2>Hello ${userData.name},</h2>
+        
+        <div class="alert-box">
+          <h3>🚨 Critical Security Alert</h3>
+          <p>Your MessFinder account has been deactivated due to multiple consecutive failed login attempts.</p>
+        </div>
+        
+        <div class="info-box">
+          <p><strong>Reason:</strong> ${userData.deactivationReason}</p>
+          <p><strong>Failed Attempts:</strong> ${userData.loginAttempts}</p>
+          <p><strong>Status:</strong> Account Deactivated</p>
+        </div>
+        
+        <p>This is an extreme security measure to protect your account from brute force attacks.</p>
+        
+        <p><strong>Immediate Action Required:</strong></p>
+        <ul>
+          <li>Your account cannot be unlocked automatically</li>
+          <li>You must contact our support team to reactivate your account</li>
+          <li>You will need to verify your identity</li>
+          <li>You may need to reset your password</li>
+        </ul>
+        
+        <div style="text-align: center; margin: 25px 0;">
+          <a href="mailto:${userData.contactEmail}" class="button">Contact Support Team</a>
+          <a href="${process.env.FRONTEND_URL}/support" class="button" style="background: #64748b;">Visit Support Center</a>
+        </div>
+        
+        <p style="color: #dc2626; font-weight: bold;">
+          If you did not attempt to access your account, please contact us immediately as your account security may be compromised.
+        </p>
+      </div>
+      
+      <div class="footer">
+        <p>Security Team - MessFinder</p>
+        <p>Email: ${userData.contactEmail} | Phone: +880 XXXX-XXXXXX</p>
+        <p>© 2024 MessFinder. All rights reserved.</p>
       </div>
     </body>
     </html>
@@ -388,4 +463,426 @@ export const getPaymentSuccessTemplate = (paymentData) => {
     </body>
     </html>
   `;
+};
+
+
+// Status update email template for viewing requests
+export const getStatusUpdateTemplate = (requestData) => {
+  const { userName, messTitle, oldStatus, newStatus, messAddress, ownerName } = requestData;
+  
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { 
+          font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+          line-height: 1.6; 
+          color: #333; 
+          margin: 0; 
+          padding: 0; 
+          background-color: #f8fafc;
+        }
+        .container { 
+          max-width: 600px; 
+          margin: 0 auto; 
+          background: #ffffff; 
+          border-radius: 10px; 
+          overflow: hidden; 
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .header { 
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+          color: white; 
+          padding: 30px 20px; 
+          text-align: center; 
+        }
+        .header h1 { 
+          margin: 0; 
+          font-size: 28px; 
+          font-weight: 600;
+        }
+        .header p { 
+          margin: 10px 0 0 0; 
+          opacity: 0.9; 
+          font-size: 16px;
+        }
+        .content { 
+          padding: 30px; 
+        }
+        .greeting { 
+          font-size: 18px; 
+          color: #2d3748; 
+          margin-bottom: 20px;
+        }
+        .status-box { 
+          background: #f7fafc; 
+          padding: 25px; 
+          border-radius: 8px; 
+          margin: 25px 0; 
+          border-left: 4px solid #667eea;
+        }
+        .status-header { 
+          color: #2d3748; 
+          margin-bottom: 20px; 
+          font-size: 20px; 
+          font-weight: 600;
+        }
+        .status-details { 
+          display: grid; 
+          gap: 12px;
+        }
+        .status-item { 
+          display: flex; 
+          justify-content: space-between; 
+          padding: 10px 0; 
+          border-bottom: 1px solid #e2e8f0;
+        }
+        .status-item:last-child { 
+          border-bottom: none;
+        }
+        .status-label { 
+          font-weight: 600; 
+          color: #4a5568;
+        }
+        .status-value { 
+          color: #2d3748; 
+          font-weight: 500;
+        }
+        .status-badge {
+          display: inline-block;
+          padding: 6px 12px;
+          border-radius: 20px;
+          color: white;
+          font-weight: 600;
+          font-size: 12px;
+          text-transform: uppercase;
+        }
+        .info-section {
+          background: ${getStatusColor(newStatus).background};
+          color: ${getStatusColor(newStatus).text};
+          padding: 20px;
+          border-radius: 8px;
+          margin: 25px 0;
+          border-left: 4px solid ${getStatusColor(newStatus).border};
+        }
+        .info-section h3 {
+          margin-top: 0;
+          margin-bottom: 15px;
+          font-size: 18px;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        .steps-list {
+          margin: 15px 0;
+          padding-left: 20px;
+        }
+        .steps-list li {
+          margin-bottom: 8px;
+          line-height: 1.5;
+        }
+        .action-button {
+          display: inline-block;
+          background: #667eea;
+          color: white;
+          padding: 14px 32px;
+          text-decoration: none;
+          border-radius: 6px;
+          font-weight: 600;
+          text-align: center;
+          transition: all 0.3s ease;
+          margin: 10px 5px;
+        }
+        .action-button:hover {
+          background: #5a6fd8;
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        .button-accepted { background: #22c55e; }
+        .button-accepted:hover { background: #16a34a; }
+        .button-rejected { background: #6c757d; }
+        .button-rejected:hover { background: #5a6268; }
+        .footer { 
+          background: #64748b; 
+          color: white; 
+          padding: 25px; 
+          text-align: center; 
+        }
+        .footer p { 
+          margin: 5px 0; 
+        }
+        .contact-info {
+          margin-top: 15px;
+          font-size: 14px;
+          opacity: 0.9;
+        }
+        .status-icon {
+          font-size: 20px;
+        }
+        @media (max-width: 600px) {
+          .content {
+            padding: 20px;
+          }
+          .status-item {
+            flex-direction: column;
+            gap: 5px;
+          }
+          .action-button {
+            display: block;
+            width: 100%;
+            margin: 10px 0;
+          }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>📬 Viewing Request Update</h1>
+          <p>MessFinder - Your accommodation partner</p>
+        </div>
+        
+        <div class="content">
+          <h2 class="greeting">Hello ${userName},</h2>
+          <p>Your mess viewing request status has been updated. Here are the details:</p>
+          
+          <div class="status-box">
+            <h3 class="status-header">📋 Request Details</h3>
+            <div class="status-details">
+              <div class="status-item">
+                <span class="status-label">Mess Name:</span>
+                <span class="status-value">${messTitle}</span>
+              </div>
+              <div class="status-item">
+                <span class="status-label">Address:</span>
+                <span class="status-value">${messAddress}</span>
+              </div>
+              <div class="status-item">
+                <span class="status-label">Owner:</span>
+                <span class="status-value">${ownerName}</span>
+              </div>
+              <div class="status-item">
+                <span class="status-label">Previous Status:</span>
+                <span class="status-value">
+                  <span class="status-badge" style="background: ${getStatusColor(oldStatus).badge}">
+                    ${getStatusDisplayText(oldStatus)}
+                  </span>
+                </span>
+              </div>
+              <div class="status-item">
+                <span class="status-label">Current Status:</span>
+                <span class="status-value">
+                  <span class="status-badge" style="background: ${getStatusColor(newStatus).badge}">
+                    ${getStatusDisplayText(newStatus)}
+                  </span>
+                </span>
+              </div>
+              <div class="status-item">
+                <span class="status-label">Updated At:</span>
+                <span class="status-value">${new Date().toLocaleString()}</span>
+              </div>
+            </div>
+          </div>
+          
+          <div class="info-section">
+            <h3>
+              <span class="status-icon">${getStatusIcon(newStatus)}</span>
+              ${getStatusTitle(newStatus)}
+            </h3>
+            ${getStatusMessage(newStatus)}
+          </div>
+          
+          <div style="text-align: center; margin: 30px 0;">
+            ${getActionButtons(newStatus)}
+          </div>
+          
+          <p style="color: #64748b; font-size: 14px; text-align: center;">
+            If you have any questions, please contact the mess owner or our support team.
+          </p>
+        </div>
+        
+        <div class="footer">
+          <p><strong>Thank you for using MessFinder!</strong></p>
+          <p>Find your perfect accommodation with ease</p>
+          <div class="contact-info">
+            <p>Email: support@messfinder.com | Phone: +880 XXXX-XXXXXX</p>
+            <p>© 2025 MessFinder. All rights reserved.</p>
+          </div>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+// Helper functions
+const getStatusColor = (status) => {
+  const colors = {
+    accepted: {
+      background: '#f0fdf4',
+      text: '#166534',
+      border: '#22c55e',
+      badge: '#16a34a'
+    },
+    rejected: {
+      background: '#fef2f2',
+      text: '#991b1b',
+      border: '#ef4444',
+      badge: '#dc2626'
+    },
+    pending: {
+      background: '#fffbeb',
+      text: '#92400e',
+      border: '#f59e0b',
+      badge: '#d97706'
+    }
+  };
+  
+  return colors[status] || {
+    background: '#f8fafc',
+    text: '#374151',
+    border: '#64748b',
+    badge: '#6b7280'
+  };
+};
+
+const getStatusDisplayText = (status) => {
+  const statusMap = {
+    accepted: 'Accepted',
+    rejected: 'Rejected', 
+    pending: 'Pending Review'
+  };
+  return statusMap[status] || status;
+};
+
+const getStatusIcon = (status) => {
+  const icons = {
+    accepted: '✅',
+    rejected: '❌',
+    pending: '⏳'
+  };
+  return icons[status] || '📝';
+};
+
+const getStatusTitle = (status) => {
+  const titles = {
+    accepted: 'Request Accepted!',
+    rejected: 'Request Not Accepted',
+    pending: 'Request Under Review'
+  };
+  return titles[status] || 'Status Updated';
+};
+
+const getStatusMessage = (status) => {
+  const messages = {
+    accepted: `
+      <p>Great news! The mess owner has accepted your viewing request. You can now proceed with scheduling a visit.</p>
+      <p><strong>Next Steps:</strong></p>
+      <ul class="steps-list">
+        <li>Contact the mess owner to schedule a convenient viewing time</li>
+        <li>Prepare questions about facilities, rules, and payment terms</li>
+        <li>Bring necessary documents if you're interested in booking</li>
+        <li>Confirm the viewing appointment a day before your visit</li>
+      </ul>
+      <p>We recommend being punctual and professional during your visit.</p>
+    `,
+    rejected: `
+      <p>We're sorry to inform you that your viewing request has not been accepted at this time.</p>
+      <p><strong>Possible reasons:</strong></p>
+      <ul class="steps-list">
+        <li>The mess is no longer available for viewing</li>
+        <li>Timing conflict with other scheduled viewings</li>
+        <li>The owner has already chosen another tenant</li>
+        <li>The mess specifications don't match your requirements</li>
+      </ul>
+      <p>Don't worry! There are plenty of other great mess options available that might be perfect for you.</p>
+    `,
+    pending: `
+      <p>Your viewing request is currently being reviewed by the mess owner.</p>
+      <p><strong>What to expect:</strong></p>
+      <ul class="steps-list">
+        <li>The owner typically responds within 24-48 hours</li>
+        <li>You'll receive another notification once a decision is made</li>
+        <li>Keep an eye on your email for updates</li>
+      </ul>
+      <p>Thank you for your patience during this process.</p>
+    `
+  };
+  
+  return messages[status] || '<p>Your request status has been updated.</p>';
+};
+
+const getActionButtons = (status) => {
+  const baseUrl = process.env.FRONTEND_URL || 'https://messfinder.com';
+  
+  const buttons = {
+    accepted: `
+      <a href="${baseUrl}/messes" class="action-button button-accepted">View Mess Details</a>
+      <a href="${baseUrl}/dashboard" class="action-button">My Dashboard</a>
+    `,
+    rejected: `
+      <a href="${baseUrl}/messes" class="action-button button-rejected">Browse Other Messes</a>
+      <a href="${baseUrl}/dashboard" class="action-button">My Dashboard</a>
+    `,
+    pending: `
+      <a href="${baseUrl}/dashboard" class="action-button">View My Dashboard</a>
+      <a href="${baseUrl}/messes" class="action-button">Browse Messes</a>
+    `
+  };
+  
+  return buttons[status] || `
+    <a href="${baseUrl}/dashboard" class="action-button">View Dashboard</a>
+  `;
+};
+
+// Text version for plain text email fallback
+// export const getStatusUpdateTextTemplate = (requestData) => {
+//   const { userName, messTitle, oldStatus, newStatus, messAddress, ownerName } = requestData;
+  
+//   return `
+// Hello ${userName},
+
+// Your mess viewing request status has been updated.
+
+// REQUEST DETAILS:
+// - Mess Name: ${messTitle}
+// - Address: ${messAddress}
+// - Owner: ${ownerName}
+// - Previous Status: ${getStatusDisplayText(oldStatus)}
+// - Current Status: ${getStatusDisplayText(newStatus)}
+// - Updated At: ${new Date().toLocaleString()}
+
+// ${getStatusTextMessage(newStatus)}
+
+// Next Steps:
+// ${getStatusNextSteps(newStatus)}
+
+// If you have any questions, please contact the mess owner or our support team.
+
+// Thank you for using MessFinder!
+
+// Best regards,
+// MessFinder Team
+// Support: support@messfinder.com
+// © 2025 MessFinder. All rights reserved.
+//   `.trim();
+// };
+
+const getStatusTextMessage = (status) => {
+  const messages = {
+    accepted: 'Great news! The mess owner has accepted your viewing request. You can now proceed with scheduling a visit.',
+    rejected: 'We\'re sorry to inform you that your viewing request has not been accepted at this time.',
+    pending: 'Your viewing request is currently being reviewed by the mess owner. You\'ll receive another notification once a decision is made.'
+  };
+  return messages[status] || 'Your request status has been updated.';
+};
+
+const getStatusNextSteps = (status) => {
+  const steps = {
+    accepted: '- Contact the mess owner to schedule a viewing\n- Prepare questions about the mess\n- Bring necessary documents for booking',
+    rejected: '- Browse other available messes on our platform\n- Adjust your search criteria if needed\n- Contact support if you need assistance',
+    pending: '- Wait for the owner\'s response (usually 24-48 hours)\n- Check your email regularly for updates'
+  };
+  return steps[status] || '- Check the platform for more details';
 };

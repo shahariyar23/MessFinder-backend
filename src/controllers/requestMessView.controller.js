@@ -5,6 +5,7 @@ import User from "../models/user.model.js";
 import ApiError from "../utils/ApiError.js";
 import ApiSuccess from "../utils/ApiSuccess.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import { sendStatusUpdateEmail } from "../utils/service/emailService.js";
 
 const addRequest = asyncHandler(async (req, res) => {
     const { messId } = req.params;
@@ -102,7 +103,7 @@ const addRequest = asyncHandler(async (req, res) => {
 const updateRequestStatus = asyncHandler(async (req, res) => {
     const { requestId } = req.params;
     const { status } = req.body;
-    const ownerId = req.user.id; // Assuming the owner is making this request
+    const ownerId = req.user.id;
 
     // Validate status
     const allowedStatuses = ["pending", "accepted", "rejected"];
@@ -113,14 +114,18 @@ const updateRequestStatus = asyncHandler(async (req, res) => {
         );
     }
 
-    // Find the request
-    const viewRequest = await RequesteMessView.findById(requestId);
+    // Find the request and populate necessary fields
+    const viewRequest = await RequesteMessView.findById(requestId)
+        .populate("userId", "name email")
+        .populate("ownerId", "name email")
+        .populate("messId", "title address status");
+
     if (!viewRequest) {
         throw new ApiError(404, "Viewing request not found");
     }
 
     // Verify that the current user is the owner of the mess
-    if (viewRequest.ownerId.toString() !== ownerId.toString()) {
+    if (viewRequest.ownerId._id.toString() !== ownerId.toString()) {
         throw new ApiError(
             403,
             "You are not authorized to update this request"
@@ -137,7 +142,18 @@ const updateRequestStatus = asyncHandler(async (req, res) => {
         throw new ApiError(400, "Can only resubmit rejected requests");
     }
 
+    // ✅ Update mess status to "pending" if request is accepted
+    if (status === "accepted") {
+        const mess = await MessListing.findById(viewRequest.messId._id);
+        if (mess) {
+            mess.status = "pending";
+            await mess.save();
+            console.log(`✅ Mess status updated to "pending" for mess: ${mess.title}`);
+        }
+    }
+
     // Update the request status
+    const previousStatus = viewRequest.status;
     viewRequest.status = status;
     viewRequest.updatedAt = new Date();
 
@@ -150,23 +166,36 @@ const updateRequestStatus = asyncHandler(async (req, res) => {
         status: status,
         changedBy: ownerId,
         changedAt: new Date(),
+        previousStatus: previousStatus
     });
 
     await viewRequest.save();
 
-    // Populate user details for notification (optional)
-    await viewRequest.populate("userId", "name email phone");
-    await viewRequest.populate("messId", "name location");
-
-    // Here you can add notification logic:
-    // - Send email to user about status update
-    // - Send push notification
-    // - Add to notification collection
+    // ✅ CORRECT: Send email notification to user with proper parameters
+    try {
+        await sendStatusUpdateEmail(
+            viewRequest.userId.email, // First parameter: userEmail
+            {                         // Second parameter: requestData
+                userName: viewRequest.userId.name,
+                messTitle: viewRequest.messId.title, // Use messTitle instead of messName
+                messAddress: viewRequest.messId.address,
+                ownerName: viewRequest.ownerId.name,
+                oldStatus: previousStatus,           // Use oldStatus instead of previousStatus
+                newStatus: status,
+                requestDate: viewRequest.createdAt,
+                updateDate: new Date()
+            }
+        );
+        console.log(`✅ Status update email sent to: ${viewRequest.userId.email}`);
+    } catch (emailError) {
+        console.error('❌ Failed to send status update email:', emailError);
+        // Don't throw error, just log it
+    }
 
     let message = "";
     switch (status) {
         case "accepted":
-            message = "Request accepted successfully. User has been notified.";
+            message = "Request accepted successfully. User has been notified and mess status set to pending.";
             break;
         case "rejected":
             message = "Request rejected successfully. User has been notified.";
@@ -179,15 +208,16 @@ const updateRequestStatus = asyncHandler(async (req, res) => {
     }
 
     return res.status(200).json(
-        new ApiSuccess(200, message, {
+        new ApiSuccess(message, {
             request: {
                 id: viewRequest._id,
                 status: viewRequest.status,
                 userId: viewRequest.userId,
                 messId: viewRequest.messId,
                 updatedAt: viewRequest.updatedAt,
+                messStatus: status === "accepted" ? "pending" : viewRequest.messId.status
             },
-        })
+        }, 200)
     );
 });
 
@@ -230,8 +260,10 @@ const getRequestDetails = asyncHandler(async (req, res) => {
 });
 
 const getAllRequests = asyncHandler(async (req, res) => {
-    const ownerId = req.user.id; // Assuming the owner is making this request
+    const ownerId = req.user.id;
     const { page = 1, limit = 10 } = req.query;
+    
+    console.log('Owner ID:', ownerId);
 
     // Validate page and limit
     const pageNum = parseInt(page);
@@ -242,13 +274,13 @@ const getAllRequests = asyncHandler(async (req, res) => {
     }
 
     // Build filter object
-    const filter = { ownerId };
+    const filter = { ownerId: new mongoose.Types.ObjectId(ownerId) };
 
     // Execute query with pagination
     const skip = (pageNum - 1) * limitNum;
 
     const requests = await RequesteMessView.find(filter)
-        .populate("userId", "name email phone")
+        .populate("userId", "name email phone avatar")
         .populate("ownerId", "name email phone")
         .populate("messId", "title location address images")
         .skip(skip)
@@ -281,35 +313,61 @@ const getAllRequests = asyncHandler(async (req, res) => {
         statusStats[item._id] = item.count;
     });
 
-    // Format response data
-    const formattedRequests = requests.map((request) => ({
-        id: request._id,
-        user: {
+    // ✅ FIXED: Format response data with null checks
+    const formattedRequests = requests.map((request) => {
+        // Check if populated fields exist
+        const user = request.userId ? {
             id: request.userId._id,
-            name: request.userId.name,
-            email: request.userId.email,
-            phone: request.userId.phone,
-            avatar: request.userId.avatar,
-        },
-        owner: {
+            name: request.userId.name || 'N/A',
+            email: request.userId.email || 'N/A',
+            phone: request.userId.phone || 'N/A',
+            avatar: request.userId.avatar || null,
+        } : {
+            id: null,
+            name: 'User Not Found',
+            email: 'N/A',
+            phone: 'N/A',
+            avatar: null,
+        };
+
+        const owner = request.ownerId ? {
             id: request.ownerId._id,
-            name: request.ownerId.name,
-            email: request.ownerId.email,
-            phone: request.ownerId.phone,
-        },
-        mess: {
+            name: request.ownerId.name || 'N/A',
+            email: request.ownerId.email || 'N/A',
+            phone: request.ownerId.phone || 'N/A',
+        } : {
+            id: null,
+            name: 'Owner Not Found',
+            email: 'N/A',
+            phone: 'N/A',
+        };
+
+        const mess = request.messId ? {
             id: request.messId._id,
-            name: request.messId.title,
-            location: request.messId.location,
-            address: request.messId.address,
-            images: request.messId.images,
-        },
-        status: request.status,
-        requestedDate: request.createdAt,
-        preferredTime: request.preferredTime,
-        createdAt: request.createdAt,
-        updatedAt: request.updatedAt,
-    }));
+            name: request.messId.title || 'N/A',
+            location: request.messId.location || 'N/A',
+            address: request.messId.address || 'N/A',
+            images: request.messId.images || [],
+        } : {
+            id: null,
+            name: 'Mess Not Found',
+            location: 'N/A',
+            address: 'N/A',
+            images: [],
+        };
+
+        return {
+            id: request._id,
+            user,
+            owner,
+            mess,
+            status: request.status,
+            requestedDate: request.createdAt,
+            preferredTime: request.preferredTime,
+            createdAt: request.createdAt,
+            updatedAt: request.updatedAt,
+        };
+    });
 
     // Pagination info
     const totalPages = Math.ceil(totalRequests / limitNum);

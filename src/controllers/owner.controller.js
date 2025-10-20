@@ -22,8 +22,8 @@ const getMessesByOwnerId = asyncHandler(async (req, res) => {
 
     // Build query
     const query = { owner_id: ownerId };
-
-    if (status && ["free", "booked", "in progress"].includes(status)) {
+    
+    if (status && ['free', 'booked', 'in progress'].includes(status)) {
         query.status = status;
     }
 
@@ -31,7 +31,7 @@ const getMessesByOwnerId = asyncHandler(async (req, res) => {
 
     // Get messes with pagination
     const messes = await MessListing.find(query)
-        .populate("owner_id", "name email phone")
+        .populate('owner_id', 'name email phone')
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(parseInt(limit))
@@ -43,52 +43,43 @@ const getMessesByOwnerId = asyncHandler(async (req, res) => {
     // Get review stats for these messes
     const reviewStats = await Review.aggregate([
         {
-            $match: {
+            $match: { 
                 status: "active",
-                mess_id: { $in: messes.map((m) => m._id) },
-            },
+                mess_id: { $in: messes.map(m => m._id) }
+            }
         },
         {
             $group: {
                 _id: "$mess_id",
                 averageRating: { $avg: "$rating" },
-                totalReviews: { $sum: 1 },
-            },
-        },
+                totalReviews: { $sum: 1 }
+            }
+        }
     ]);
 
     // Create review map
     const reviewMap = new Map();
-    reviewStats.forEach((stat) => {
+    reviewStats.forEach(stat => {
         reviewMap.set(stat._id.toString(), {
             averageRating: Math.round(stat.averageRating * 10) / 10 || 0,
-            totalReviews: stat.totalReviews || 0,
+            totalReviews: stat.totalReviews || 0
         });
     });
 
     // Enhance mess data
-    const enhancedMesses = messes.map((mess) => ({
+    const enhancedMesses = messes.map(mess => ({
         ...mess,
         ratingInfo: reviewMap.get(mess._id.toString()) || {
             averageRating: 0,
-            totalReviews: 0,
-        },
+            totalReviews: 0
+        }
     }));
 
     // Calculate basic statistics
-    const totalViews = enhancedMesses.reduce(
-        (sum, mess) => sum + (mess.view || 0),
-        0
-    );
-    const freeMesses = enhancedMesses.filter(
-        (mess) => mess.status === "free"
-    ).length;
-    const bookedMesses = enhancedMesses.filter(
-        (mess) => mess.status === "booked"
-    ).length;
-    const pendingMesses = enhancedMesses.filter(
-        (mess) => mess.status === "pending"
-    ).length;
+    const totalViews = enhancedMesses.reduce((sum, mess) => sum + (mess.view || 0), 0);
+    const freeMesses = enhancedMesses.filter(mess => mess.status === 'free').length;
+    const bookedMesses = enhancedMesses.filter(mess => mess.status === 'booked').length;
+    const pendingMesses = enhancedMesses.filter(mess => mess.status === 'pending').length;
 
     const totalPages = Math.ceil(totalMesses / limit);
 
@@ -100,102 +91,109 @@ const getMessesByOwnerId = asyncHandler(async (req, res) => {
                 totalPages,
                 totalMesses,
                 hasNext: page < totalPages,
-                hasPrev: page > 1,
+                hasPrev: page > 1
             },
             statistics: {
                 totalMesses,
                 freeMesses,
                 bookedMesses,
                 pendingMesses,
-                totalViews,
-            },
+                totalViews
+            }
         })
     );
 });
 
 const updateMessStatus = asyncHandler(async (req, res) => {
-    const { mess_id, status } = req.body;
-    const owner_id = req.user?.id; // From authenticated middleware
-    console.log("Full request body:", req.body);
-    console.log("Request headers:", req.headers);
-    console.log("Request method:", req.method);
+    try {
+        const { mess_id, status } = req.body;
+        const owner_id = req.user?.id; // From authenticated middleware
 
-    
-    console.log("Destructured:", { mess_id, status });
-    // Validate input
-    if (!mess_id) {
-        throw new ApiError(400, "Mess ID is required");
-    }
-
-    if (!status) {
-        throw new ApiError(400, "Status is required");
-    }
-
-    // Validate status value
-    const allowedStatuses = ["free", "booked", "in progress", "pending"];
-    if (!allowedStatuses.includes(status)) {
-        throw new ApiError(
-            400,
-            `Status must be one of: ${allowedStatuses.join(", ")}`
-        );
-    }
-
-    // Check if mess exists and belongs to the current user
-    const existingMess = await MessListing.findOne({
-        _id: mess_id,
-        owner_id: owner_id,
-    });
-
-    if (!existingMess) {
-        throw new ApiError(404, "Mess not found or access denied");
-    }
-
-    // Prevent unnecessary updates
-    if (existingMess.status === status) {
-        return res.status(200).json(
-            new ApiSuccess(
-                "Mess status is already set to the requested status",
-                {
-                    mess: existingMess,
-                }
-            )
-        );
-    }
-
-    // Update mess status
-    const updatedMess = await MessListing.findByIdAndUpdate(
-        mess_id,
-        {
-            $set: {
-                status: status,
-                updatedAt: new Date(),
-            },
-        },
-        {
-            new: true,
-            runValidators: true,
+        // Validate input
+        if (!mess_id) {
+            throw new ApiError(400, "Mess ID is required");
         }
-    ).populate("owner_id", "name email phone");
 
-    if (!updatedMess) {
-        throw new ApiError(500, "Failed to update mess status");
-    }
+        if (!status) {
+            throw new ApiError(400, "Status is required");
+        }
 
-    // Log the status change (optional)
-    console.log(
-        `Mess ${mess_id} status changed from ${existingMess.status} to ${status} by owner ${owner_id}`
-    );
+        // Validate status value
+        const allowedStatuses = ['free', 'booked', 'in progress', 'pending'];
+        if (!allowedStatuses.includes(status)) {
+            throw new ApiError(400, `Status must be one of: ${allowedStatuses.join(', ')}`);
+        }
 
-    return res.status(200).json(
-        new ApiSuccess("Mess status updated successfully", {
-            mess: updatedMess,
-            statusChange: {
-                from: existingMess.status,
-                to: status,
+        // Check if mess exists and belongs to the current user
+        const existingMess = await MessListing.findOne({
+            _id: mess_id,
+            owner_id: owner_id
+        });
+
+        if (!existingMess) {
+            throw new ApiError(404, "Mess not found or access denied");
+        }
+
+        // Prevent unnecessary updates
+        if (existingMess.status === status) {
+            return res.status(200).json(
+                new ApiSuccess("Mess status is already set to the requested status", {
+                    mess: existingMess
+                })
+            );
+        }
+
+        // Update mess status
+        const updatedMess = await MessListing.findByIdAndUpdate(
+            mess_id,
+            {
+                $set: {
+                    status: status,
+                    updatedAt: new Date()
+                }
             },
-            timestamp: new Date().toISOString(),
-        })
-    );
+            {
+                new: true,
+                runValidators: true
+            }
+        ).populate('owner_id', 'name email phone');
+
+        if (!updatedMess) {
+            throw new ApiError(500, "Failed to update mess status");
+        }
+
+        // Log the status change (optional)
+        console.log(`Mess ${mess_id} status changed from ${existingMess.status} to ${status} by owner ${owner_id}`);
+
+        return res.status(200).json(
+            new ApiSuccess("Mess status updated successfully", {
+                mess: updatedMess,
+                statusChange: {
+                    from: existingMess.status,
+                    to: status
+                },
+                timestamp: new Date().toISOString()
+            })
+        );
+
+    } catch (error) {
+        console.error("Error in updateMessStatus:", error);
+        
+        if (error instanceof ApiError) {
+            throw error;
+        }
+        
+        // Handle specific MongoDB errors
+        if (error.name === 'CastError') {
+            throw new ApiError(400, "Invalid Mess ID format");
+        }
+        
+        throw new ApiError(500, "Internal server error while updating mess status");
+    }
 });
 
-export { getMessesByOwnerId, updateMessStatus };
+
+export {
+    getMessesByOwnerId,
+    updateMessStatus
+}

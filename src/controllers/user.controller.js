@@ -5,10 +5,12 @@ import jwt from "jsonwebtoken";
 import ApiError from "../utils/ApiError.js";
 import ApiSuccess from "../utils/ApiSuccess.js";
 import {
+    sendAccountDeactivatedNotification,
     sendPasswordResetCode,
     sendPasswordResetSuccess,
     sendWelcomeEmail
 } from "../utils/service/emailService.js";
+import { getAccountLockedTemplate } from "../utils/emailTemplates.js";
 
 
 
@@ -101,6 +103,19 @@ const login = asyncHandler(async (req, res) => {
         // Deactivate account after 5 failed attempts
         if (user.loginAttempts >= 5) {
             user.isActive = false;
+              try {
+                await sendAccountDeactivatedNotification(user.email, {
+                    name: user.name || 'User',
+                    deactivationReason: 'Multiple consecutive failed login attempts',
+                    loginAttempts: user.loginAttempts,
+                    contactEmail: 'support@messfinder.com'
+                });
+                console.log(`🚫 Account deactivated email sent to: ${user.email}`);
+            } catch (emailError) {
+                console.error('❌ Failed to send account deactivated email:', emailError);
+                // Don't throw error, just log it
+            }
+          
         }
 
         await user.save();
@@ -273,6 +288,8 @@ const resetPassword = asyncHandler(async (req, res) => {
 const hashedPassword = await bcrypt.hash(newPassword, 12);
     // Update password
     user.password = hashedPassword;
+    user.isActive = true;
+    user.loginAttempts = 0;
     user.resetPasswordCode = undefined;
     user.resetPasswordExpires = undefined;
     await user.save();
