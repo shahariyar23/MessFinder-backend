@@ -1,18 +1,14 @@
 {
-  "name": "messfinder-backend",
+  "name": "server-site",
   "version": "1.0.0",
-  "description": "MessFinder Backend API",
+  "description": "",
   "license": "ISC",
   "author": "Mostak Shahariyar",
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "NODE_ENV=development nodemon index.js",
-    "start": "NODE_ENV=production node index.js",
-    "dev:local": "NODE_ENV=development nodemon index.js",
-    "dev:prod": "NODE_ENV=production nodemon index.js",
-    "build": "echo 'No build step needed for Node.js'",
-    "vercel-build": "echo 'Building for Vercel'"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon src/index.js"
   },
   "devDependencies": {
     "nodemon": "^3.1.10",
@@ -31,8 +27,5 @@
     "nodemailer": "^7.0.9",
     "pdfkit": "^0.17.2",
     "sslcommerz-lts": "^1.2.0"
-  },
-  "engines": {
-    "node": ">=18.x"
   }
 }
