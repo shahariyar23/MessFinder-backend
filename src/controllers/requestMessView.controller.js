@@ -5,7 +5,7 @@ import User from "../models/user.model.js";
 import ApiError from "../utils/ApiError.js";
 import ApiSuccess from "../utils/ApiSuccess.js";
 import asyncHandler from "../utils/asyncHandler.js";
-import { sendStatusUpdateEmail } from "../utils/service/emailService.js";
+import { sendRequestStatusUpdateToOwner, sendStatusUpdateEmail } from "../utils/service/emailService.js";
 
 const addRequest = asyncHandler(async (req, res) => {
     const { messId } = req.params;
@@ -65,39 +65,52 @@ const addRequest = asyncHandler(async (req, res) => {
         status: "rejected",
     });
 
+    let savedRequest;
+
     if (rejectedRequest) {
         // Update the rejected request to pending instead of creating new one
         rejectedRequest.status = "pending";
         rejectedRequest.createdAt = new Date();
-        await rejectedRequest.save();
-
-        return res
-            .status(200)
-            .json(
-                new ApiSuccess(
-                    "Request resubmitted successfully! Owner will contact with you.",
-                    200
-                )
-            );
+        savedRequest = await rejectedRequest.save();
+    } else {
+        // Create new request if no existing requests found
+        const newRequest = new RequesteMessView({
+            messId,
+            userId,
+            ownerId,
+        });
+        savedRequest = await newRequest.save();
     }
 
-    // Create new request if no existing requests found
-    const newRequest = new RequesteMessView({
-        messId,
-        userId,
-        ownerId,
-    });
+    // Send email notification to owner
+    try {
+        const owner = await User.findById(ownerId);
+        if (owner && owner.email) {
+            const requestData = {
+                userName: user.name,
+                userEmail: user.email,
+                userPhone: user.phone,
+                messTitle: mess.title,
+                messAddress: mess.address,
+                requestStatus: 'pending',
+                requestDate: savedRequest.createdAt,
+                requestId: savedRequest._id.toString(),
+                messId: messId
+            };
 
-    await newRequest.save();
+            await sendRequestStatusUpdateToOwner(owner.email, requestData);
+            console.log('Viewing request notification sent to owner:', owner.email);
+        }
+    } catch (emailError) {
+        console.error('Failed to send email notification:', emailError);
+        // Don't throw error - email failure shouldn't break the request creation
+    }
 
-    return res
-        .status(201)
-        .json(
-            new ApiSuccess(
-                "Request Sent Successfully! Owner will contact with you.",
-                201
-            )
-        );
+    const message = rejectedRequest 
+        ? "Request resubmitted successfully! Owner will contact with you."
+        : "Request Sent Successfully! Owner will contact with you.";
+
+    return res.status(rejectedRequest ? 200 : 201).json(new ApiSuccess(message, rejectedRequest ? 200 : 201));
 });
 
 const updateRequestStatus = asyncHandler(async (req, res) => {

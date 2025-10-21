@@ -9,6 +9,7 @@ import {
     deleteReview,
     reportReview,
     getMessReviewStats,
+    getUserReviewStatus,
 } from "../controllers/review.controller.js";
 import { authMiddleware } from "../middleware/authMiddleware.js";
 
@@ -16,7 +17,7 @@ const reviewRoute = express.Router();
 
 reviewRoute.route("/create-review").post(authMiddleware, createReview);
 reviewRoute.route("/get-review-mess/:messId").get(authMiddleware, getMessReviews);
-reviewRoute.route("/get-review-user").get(authMiddleware, getUserReviews);
+reviewRoute.route("/get-review-user").get(authMiddleware, getUserReviewStatus);
 reviewRoute.route("/get-review-id/:reviewId").get(authMiddleware, getReviewById);
 reviewRoute.route("/update-review-id/:reviewId").post(authMiddleware, updateReview);
 reviewRoute.route("/delete-review-id/:reviewId").get(authMiddleware, deleteReview);

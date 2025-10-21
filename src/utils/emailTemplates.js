@@ -836,53 +836,113 @@ const getActionButtons = (status) => {
   `;
 };
 
-// Text version for plain text email fallback
-// export const getStatusUpdateTextTemplate = (requestData) => {
-//   const { userName, messTitle, oldStatus, newStatus, messAddress, ownerName } = requestData;
-  
-//   return `
-// Hello ${userName},
+// Email template for request status updates
+export const getRequestStatusTemplate = (requestData) => {
+  const { 
+    userName, 
+    userEmail, 
+    userPhone, 
+    messTitle, 
+    messAddress, 
+    requestStatus, 
+    requestDate,
+    requestId,
+    userMessage 
+  } = requestData;
 
-// Your mess viewing request status has been updated.
-
-// REQUEST DETAILS:
-// - Mess Name: ${messTitle}
-// - Address: ${messAddress}
-// - Owner: ${ownerName}
-// - Previous Status: ${getStatusDisplayText(oldStatus)}
-// - Current Status: ${getStatusDisplayText(newStatus)}
-// - Updated At: ${new Date().toLocaleString()}
-
-// ${getStatusTextMessage(newStatus)}
-
-// Next Steps:
-// ${getStatusNextSteps(newStatus)}
-
-// If you have any questions, please contact the mess owner or our support team.
-
-// Thank you for using MessFinder!
-
-// Best regards,
-// MessFinder Team
-// Support: support@messfinder.com
-// © 2025 MessFinder. All rights reserved.
-//   `.trim();
-// };
-
-const getStatusTextMessage = (status) => {
-  const messages = {
-    accepted: 'Great news! The mess owner has accepted your viewing request. You can now proceed with scheduling a visit.',
-    rejected: 'We\'re sorry to inform you that your viewing request has not been accepted at this time.',
-    pending: 'Your viewing request is currently being reviewed by the mess owner. You\'ll receive another notification once a decision is made.'
+  const statusColors = {
+    pending: '#f59e0b', // amber
+    accepted: '#10b981', // green
+    rejected: '#ef4444', // red
+    cancelled: '#6b7280' // gray
   };
-  return messages[status] || 'Your request status has been updated.';
-};
 
-const getStatusNextSteps = (status) => {
-  const steps = {
-    accepted: '- Contact the mess owner to schedule a viewing\n- Prepare questions about the mess\n- Bring necessary documents for booking',
-    rejected: '- Browse other available messes on our platform\n- Adjust your search criteria if needed\n- Contact support if you need assistance',
-    pending: '- Wait for the owner\'s response (usually 24-48 hours)\n- Check your email regularly for updates'
+  const statusIcons = {
+    pending: '🔔',
+    accepted: '✅',
+    rejected: '❌',
+    cancelled: '🚫'
   };
-  return steps[status] || '- Check the platform for more details';
+
+  const statusMessages = {
+    pending: 'New viewing request received',
+    accepted: 'Viewing request has been accepted',
+    rejected: 'Viewing request has been rejected',
+    cancelled: 'Viewing request has been cancelled'
+  };
+
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+            .content { background: #f9fafb; padding: 30px; border-radius: 0 0 10px 10px; }
+            .status-badge { 
+                display: inline-block; 
+                padding: 8px 16px; 
+                border-radius: 20px; 
+                font-weight: bold; 
+                margin: 10px 0; 
+                background-color: ${statusColors[requestStatus] || '#6b7280'}; 
+                color: white; 
+            }
+            .info-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #667eea; }
+            .user-details { background: #e8f4fd; padding: 15px; border-radius: 8px; margin: 15px 0; }
+            .button { display: inline-block; padding: 12px 24px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; margin: 10px 5px; }
+            .footer { text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e5e7eb; color: #6b7280; font-size: 14px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>${statusIcons[requestStatus]} ${statusMessages[requestStatus]}</h1>
+                <p>Mess: ${messTitle}</p>
+            </div>
+            
+            <div class="content">
+                <div class="status-badge">
+                    Request Status: ${requestStatus.toUpperCase()}
+                </div>
+                
+                <div class="info-box">
+                    <h3>📋 Request Details</h3>
+                    <p><strong>Request ID:</strong> ${requestId}</p>
+                    <p><strong>Mess Title:</strong> ${messTitle}</p>
+                    <p><strong>Mess Address:</strong> ${messAddress}</p>
+                    <p><strong>Request Date:</strong> ${new Date(requestDate).toLocaleDateString()}</p>
+                </div>
+                
+                <div class="user-details">
+                    <h3>👤 User Information</h3>
+                    <p><strong>Name:</strong> ${userName}</p>
+                    <p><strong>Email:</strong> ${userEmail}</p>
+                    <p><strong>Phone:</strong> ${userPhone || 'Not provided'}</p>
+                    ${userMessage ? `<p><strong>Message:</strong> ${userMessage}</p>` : ''}
+                </div>
+                
+                <div style="text-align: center; margin: 25px 0;">
+                    <a href="${process.env.FRONTEND_URL}/owner/requests" class="button">View All Requests</a>
+                    <a href="${process.env.FRONTEND_URL}/mess/info/${requestData.messId}" class="button" style="background: #10b981;">View Mess Details</a>
+                </div>
+                
+                ${requestStatus === 'pending' ? `
+                <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;">
+                    <h4 style="color: #856404; margin: 0;">Action Required</h4>
+                    <p style="color: #856404; margin: 5px 0 0 0;">Please respond to this viewing request within 24 hours.</p>
+                </div>
+                ` : ''}
+                
+                <div class="footer">
+                    <p>This is an automated notification from MessFinder.</p>
+                    <p>If you have any questions, please contact our support team.</p>
+                    <p>&copy; ${new Date().getFullYear()} MessFinder. All rights reserved.</p>
+                </div>
+            </div>
+        </div>
+    </body>
+    </html>
+  `;
 };

@@ -7,6 +7,7 @@ import asyncHandler from "../utils/asyncHandler.js";
 
 const getMessesByOwnerId = asyncHandler(async (req, res) => {
     const { ownerId } = req.params;
+    console.log(req.params)
     const { page = 1, limit = 10, status } = req.query;
 
     // Validate ownerId

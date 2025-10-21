@@ -1,5 +1,5 @@
 import transporter from '../emailService.js';
-import { getAccountDeactivatedTemplate, getBookingConfirmationTemplate, getOwnerNotificationTemplate, getPasswordResetSuccessTemplate, getPasswordResetTemplate, getPaymentSuccessTemplate, getStatusUpdateTemplate } from '../emailTemplates.js';
+import { getAccountDeactivatedTemplate, getBookingConfirmationTemplate, getOwnerNotificationTemplate, getPasswordResetSuccessTemplate, getPasswordResetTemplate, getPaymentSuccessTemplate, getRequestStatusTemplate, getStatusUpdateTemplate } from '../emailTemplates.js';
 import path from 'path';
 import fs from 'fs';
 import { generatePaymentReceiptPDF } from '../paymentPDFGenerator.js';
@@ -213,3 +213,39 @@ export const sendAccountDeactivatedNotification = async (userEmail, userData) =>
     throw error;
   }
 };
+
+export const sendRequestStatusUpdateToOwner = async (ownerEmail, requestData) => {
+  try {
+    const { 
+      userName, 
+      userEmail, 
+      userPhone, 
+      messTitle, 
+      messAddress, 
+      requestStatus, 
+      requestDate,
+      requestId 
+    } = requestData;
+
+    const subject = `🔔 New Viewing Request from ${userName}`;
+    
+    const mailOptions = {
+      from: `"MessFinder" <${process.env.EMAIL_USER}>`,
+      to: ownerEmail,
+      subject: subject,
+      html: getRequestStatusTemplate(requestData),
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+    console.log('Request status update email sent to owner:', result.messageId);
+    return result;
+  } catch (error) {
+    console.error('Error sending request status update email to owner:', error);
+    throw error;
+  }
+};
+
+
+
+
+

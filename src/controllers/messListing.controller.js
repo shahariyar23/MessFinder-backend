@@ -22,7 +22,6 @@ const addMess = asyncHandler(async (req, res) => {
         roomFeatures,
         genderPreference,
         contact,
-        owner_id,
     } = req.body;
     console.log(req.body);
     // Validation checks
@@ -83,7 +82,7 @@ const addMess = asyncHandler(async (req, res) => {
     const newMess = new MessListing({
         title: title.trim(),
         description: description.trim(),
-        owner_id,
+        owner_id: req?.user?.id,
         address: address.trim(),
         availableFrom: new Date(availableFrom),
         advancePaymentMonth: parseInt(advancePaymentMonth) || 1,
@@ -252,118 +251,119 @@ const getAllMess = asyncHandler(async (req, res) => {
     const skip = (page - 1) * limit;
     const { minRating, maxRating } = req.query;
 
-    // Build aggregation pipeline
-    const pipeline = [
-        // Lookup owner information
-        {
-            $lookup: {
-                from: "users",
-                localField: "owner_id",
-                foreignField: "_id",
-                as: "owner_info",
-            },
-        },
-        {
-            $unwind: "$owner_info",
-        },
-        // Filter only active owners
-        {
-            $match: {
-                "owner_info.isActive": true,
-            },
-        },
-        // Add rating filters if provided
-        ...(minRating || maxRating
-            ? [
-                  {
-                      $match: {
-                          review: {
-                              ...(minRating && { $gte: parseFloat(minRating) }),
-                              ...(maxRating && { $lte: parseFloat(maxRating) }),
-                          },
-                      },
-                  },
-              ]
-            : []),
-        // Sort and paginate
-        {
-            $sort: { createdAt: -1 },
-        },
-        {
-            $skip: skip,
-        },
-        {
-            $limit: limit,
-        },
-        // Project only needed fields
-        {
-            $project: {
-                title: 1,
-                description: 1,
-                address: 1,
-                status: 1,
-                availableFrom: 1,
-                payPerMonth: 1,
-                facilities: 1,
-                roomType: 1,
-                roomFeatures: 1,
-                genderPreference: 1,
-                contact: 1,
-                image: 1,
-                view: 1,
-                review: 1,
-                createdAt: 1,
-                updatedAt: 1,
-                owner_id: "$owner_info._id",
-                owner_name: "$owner_info.name",
-                owner_email: "$owner_info.email",
-                owner_phone: "$owner_info.phone",
-            },
-        },
-    ];
+    // Always set status to "free"
+    const queryStatus = "free";
 
-    const [allMess, totalMess] = await Promise.all([
-        MessListing.aggregate(pipeline),
-        MessListing.countDocuments({}), // Get total count for pagination
-    ]);
+    console.log('🔍 Filtering messes with status:', queryStatus);
 
-    // Get review counts
-    const messIds = allMess.map((mess) => mess._id);
-    const reviewStats = await Review.aggregate([
-        {
-            $match: {
-                mess_id: { $in: messIds },
-                status: "active",
-            },
-        },
-        {
-            $group: {
-                _id: "$mess_id",
-                totalReviews: { $sum: 1 },
-                averageRating: { $avg: "$rating" },
-            },
-        },
-    ]);
+    // STEP 1: First find all messes with status "free" using find()
+    const baseQuery = {
+        status: queryStatus
+    };
 
-    const reviewMap = Object.fromEntries(
-        reviewStats.map((stat) => [
-            stat._id.toString(),
-            {
-                totalReviews: stat.totalReviews,
-                averageRating: Math.round(stat.averageRating * 10) / 10,
-            },
-        ])
+    // Get total count of free messes
+    const totalMess = await MessListing.countDocuments({status: "free"});
+
+    // STEP 2: Find free messes with pagination
+    const freeMesses = await MessListing.find({status: "free"})
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate('owner_id', 'name email phone isActive') // Populate owner info
+        .lean();
+
+    console.log(`✅ Found ${freeMesses.length} messes with status: ${queryStatus}`);
+
+    // Debug: Check status of returned messes
+    freeMesses.forEach((mess, index) => {
+        console.log(`📦 Mess ${index + 1}: ID=${mess._id}, Status=${mess.status}, Title=${mess.title}`);
+    });
+
+    // STEP 3: Filter out messes where owner is not active
+    const activeOwnerMesses = freeMesses.filter(mess => 
+        mess.owner_id && mess.owner_id.isActive === true
     );
 
-    const enhancedMess = allMess.map((mess) => ({
-        ...mess,
-        ratingInfo: {
-            totalReviews: reviewMap[mess._id.toString()]?.totalReviews || 0,
-            detailedRating: reviewMap[mess._id.toString()]?.averageRating || 0,
-        },
-    }));
+    console.log(`👤 After owner filter: ${activeOwnerMesses.length} messes`);
 
+    // STEP 4: Get rating information for the filtered messes
+    let enhancedMess = [];
+    if (activeOwnerMesses.length > 0) {
+        const messIds = activeOwnerMesses.map((mess) => mess._id);
+        
+        const reviewStats = await Review.aggregate([
+            {
+                $match: {
+                    mess_id: { $in: messIds },
+                    status: "active",
+                },
+            },
+            {
+                $group: {
+                    _id: "$mess_id",
+                    totalReviews: { $sum: 1 },
+                    averageRating: { $avg: "$rating" },
+                },
+            },
+        ]);
+
+        const reviewMap = Object.fromEntries(
+            reviewStats.map((stat) => [
+                stat._id.toString(),
+                {
+                    totalReviews: stat.totalReviews,
+                    averageRating: stat.averageRating ? Math.round(stat.averageRating * 10) / 10 : 0,
+                },
+            ])
+        );
+
+        // STEP 5: Apply rating filter and enhance mess data
+        enhancedMess = activeOwnerMesses
+            .map((mess) => {
+                const ratingInfo = {
+                    totalReviews: reviewMap[mess._id.toString()]?.totalReviews || 0,
+                    detailedRating: reviewMap[mess._id.toString()]?.averageRating || 0,
+                };
+
+                return {
+                    _id: mess._id,
+                    title: mess.title,
+                    description: mess.description,
+                    address: mess.address,
+                    status: mess.status,
+                    availableFrom: mess.availableFrom,
+                    payPerMonth: mess.payPerMonth,
+                    facilities: mess.facilities,
+                    roomType: mess.roomType,
+                    roomFeatures: mess.roomFeatures,
+                    genderPreference: mess.genderPreference,
+                    contact: mess.contact,
+                    image: mess.image,
+                    view: mess.view,
+                    createdAt: mess.createdAt,
+                    updatedAt: mess.updatedAt,
+                    owner_id: mess.owner_id._id,
+                    owner_name: mess.owner_id.name,
+                    owner_email: mess.owner_id.email,
+                    owner_phone: mess.owner_id.phone,
+                    ratingInfo: ratingInfo
+                };
+            })
+            .filter(mess => {
+                // Apply rating filters if provided
+                if (minRating && mess.ratingInfo.detailedRating < parseFloat(minRating)) {
+                    return false;
+                }
+                if (maxRating && mess.ratingInfo.detailedRating > parseFloat(maxRating)) {
+                    return false;
+                }
+                return true;
+            });
+    }
+
+    // STEP 6: Calculate pagination for the final filtered results
     const totalPages = Math.ceil(totalMess / limit);
+    const finalCount = enhancedMess.length;
 
     return res.status(200).json(
         new ApiSuccess("Mess listing retrieved successfully", {
@@ -371,10 +371,15 @@ const getAllMess = asyncHandler(async (req, res) => {
             pagination: {
                 currentPage: page,
                 totalPages,
-                totalMess,
+                totalMess: finalCount, // Final count after all filters
                 hasNext: page < totalPages,
                 hasPrev: page > 1,
             },
+            filters: {
+                status: queryStatus,
+                minRating: minRating || null,
+                maxRating: maxRating || null
+            }
         })
     );
 });
@@ -412,9 +417,52 @@ const messInfoWithView = asyncHandler(async (req, res) => {
         viewCount = updatedMess.view;
     }
 
+    // Get all messes owned by the same owner
+    const ownerMessIds = await MessListing.find({ 
+        owner_id: existingMess.owner_id._id 
+    }).select('_id').lean();
+
+    const ownerMessIdsArray = ownerMessIds.map(mess => mess._id);
+
     // Execute other operations in parallel
-    const [reviewStatsResult, recentReviews] = await Promise.all([
-        // Get review statistics
+    const [reviewStatsResult, recentReviews, individualMessReviewStats] = await Promise.all([
+        // Get review statistics for ALL messes of this owner
+        Review.aggregate([
+            {
+                $match: {
+                    mess_id: { $in: ownerMessIdsArray },
+                    status: "active",
+                },
+            },
+            {
+                $group: {
+                    _id: null, // Group all reviews together
+                    totalReviews: { $sum: 1 },
+                    averageRating: { $avg: "$rating" },
+                    ratingDistribution: { $push: "$rating" },
+                    // Also get per-mess stats for additional info
+                    messBreakdown: {
+                        $push: {
+                            mess_id: "$mess_id",
+                            rating: "$rating"
+                        }
+                    }
+                },
+            },
+        ]),
+
+        // Get recent reviews for ALL messes of this owner
+        Review.find({
+            mess_id: { $in: ownerMessIdsArray },
+            status: "active",
+        })
+            .populate("user_id", "name")
+            .populate("mess_id", "title") // Include mess title to show which mess was reviewed
+            .sort({ createdAt: -1 })
+            .limit(5) // Increased limit since we're showing reviews from all messes
+            .lean(),
+
+        // Get individual mess review stats for this specific mess
         Review.aggregate([
             {
                 $match: {
@@ -431,47 +479,74 @@ const messInfoWithView = asyncHandler(async (req, res) => {
                 },
             },
         ]),
-
-        // Get recent reviews
-        Review.find({
-            mess_id: id,
-            status: "active",
-        })
-            .populate("user_id", "name")
-            .sort({ createdAt: -1 })
-            .limit(3)
-            .lean(),
     ]);
 
-    // Process review statistics
-    const reviewStats = reviewStatsResult[0] || {};
-    const averageRating = reviewStats.averageRating
-        ? Math.round(reviewStats.averageRating * 10) / 10
+    // Process owner-wide review statistics
+    const ownerReviewStats = reviewStatsResult[0] || {};
+    const ownerAverageRating = ownerReviewStats.averageRating
+        ? Math.round(ownerReviewStats.averageRating * 10) / 10
         : 0;
-    const totalReviews = reviewStats.totalReviews || 0;
+    const ownerTotalReviews = ownerReviewStats.totalReviews || 0;
 
-    // Calculate rating distribution efficiently
-    const ratingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    if (reviewStats.ratingDistribution) {
-        reviewStats.ratingDistribution.forEach((rating) => {
-            ratingDistribution[rating]++;
+    // Process individual mess review statistics
+    const individualStats = individualMessReviewStats[0] || {};
+    const individualAverageRating = individualStats.averageRating
+        ? Math.round(individualStats.averageRating * 10) / 10
+        : 0;
+    const individualTotalReviews = individualStats.totalReviews || 0;
+
+    // Calculate rating distribution for owner's all messes
+    const ownerRatingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    if (ownerReviewStats.ratingDistribution) {
+        ownerReviewStats.ratingDistribution.forEach((rating) => {
+            ownerRatingDistribution[rating]++;
         });
     }
+
+    // Calculate rating distribution for individual mess
+    const individualRatingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    if (individualStats.ratingDistribution) {
+        individualStats.ratingDistribution.forEach((rating) => {
+            individualRatingDistribution[rating]++;
+        });
+    }
+
+    // Get total mess count for this owner
+    const totalMessesByOwner = ownerMessIdsArray.length;
 
     // Enhanced mess response
     const enhancedMess = {
         ...existingMess,
-        view: viewCount, // Use the correct view count
+        view: viewCount,
         ratingInfo: {
-            averageRating,
-            totalReviews,
-            ratingDistribution,
+            // Owner-wide statistics (across all messes)
+            ownerWideStats: {
+                averageRating: ownerAverageRating,
+                totalReviews: ownerTotalReviews,
+                ratingDistribution: ownerRatingDistribution,
+                totalMesses: totalMessesByOwner,
+                message: `Based on ${ownerTotalReviews} reviews across ${totalMessesByOwner} mess${totalMessesByOwner > 1 ? 'es' : ''}`
+            },
+            // Individual mess statistics
+            individualMessStats: {
+                averageRating: individualAverageRating,
+                totalReviews: individualTotalReviews,
+                ratingDistribution: individualRatingDistribution,
+                message: individualTotalReviews > 0 
+                    ? `Based on ${individualTotalReviews} review${individualTotalReviews > 1 ? 's' : ''} for this mess`
+                    : 'No reviews yet for this specific mess'
+            },
+            // Recent reviews from all messes of this owner
             recentReviews: recentReviews.map((review) => ({
                 _id: review._id,
                 rating: review.rating,
                 comment: review.comment,
                 createdAt: review.createdAt,
                 user: review.user_id,
+                mess: {
+                    _id: review.mess_id._id,
+                    title: review.mess_id.title
+                }
             })),
         },
     };
@@ -546,7 +621,6 @@ const messOnlyNotBook = asyncHandler(async (req, res) => {
             )
         );
 });
-
 const advancedSearchMess = asyncHandler(async (req, res) => {
     const {
         search, // For name/title search
@@ -556,24 +630,33 @@ const advancedSearchMess = asyncHandler(async (req, res) => {
         page = 1,
         limit = 10,
     } = req.query;
-
+    
     const skip = (page - 1) * limit;
 
-    // Build search query
-    let query = {};
+    // STEP 1: First build base query with ONLY free status messes
+    let query = { status: "free" }; // Always filter by free status first
 
+    // STEP 2: Then add search conditions for free messes only
     if (search || location) {
-        query.$or = [];
+        query.$and = [
+            { status: "free" }, // Ensure status remains free
+        ];
+
+        if (search || location) {
+            query.$and.push({
+                $or: []
+            });
+        }
 
         if (search) {
-            query.$or.push(
+            query.$and[1].$or.push(
                 { title: { $regex: search, $options: "i" } },
                 { description: { $regex: search, $options: "i" } }
             );
         }
 
         if (location) {
-            query.$or.push({ address: { $regex: location, $options: "i" } });
+            query.$and[1].$or.push({ address: { $regex: location, $options: "i" } });
         }
     }
 
@@ -588,17 +671,70 @@ const advancedSearchMess = asyncHandler(async (req, res) => {
             sortOptions.createdAt = sortOrder === "asc" ? 1 : -1;
             break;
         case "rating":
-            // We'll handle rating sorting after getting reviews
-            sortOptions.createdAt = -1; // Temporary default
+            sortOptions.createdAt = -1; // Will sort after aggregation
             break;
         default:
             sortOptions.createdAt = -1;
     }
 
-    // Get review statistics for rating
-    const reviewStats = await Review.aggregate([
+    // STEP 3: Get all free messes first
+    const freeMesses = await MessListing.find({ status: "free" })
+        .populate("owner_id", "name email phone isActive")
+        .lean();
+
+    // Get all owner IDs from free messes
+    const ownerIds = [...new Set(freeMesses.map(mess => mess.owner_id?._id.toString()).filter(Boolean))];
+
+    // STEP 4: Get owner-wide review statistics
+    const ownerReviewStats = await Review.aggregate([
         {
-            $match: { status: "active" },
+            $match: { 
+                status: "active",
+                mess_id: { 
+                    $in: freeMesses.map(mess => mess._id) 
+                }
+            },
+        },
+        {
+            $lookup: {
+                from: "messlistings",
+                localField: "mess_id",
+                foreignField: "_id",
+                as: "mess_info"
+            }
+        },
+        {
+            $unwind: "$mess_info"
+        },
+        {
+            $group: {
+                _id: "$mess_info.owner_id", // Group by owner instead of mess
+                averageRating: { $avg: "$rating" },
+                totalReviews: { $sum: 1 },
+                totalMesses: { $addToSet: "$mess_id" }, // Count unique messes
+                ratingDistribution: { $push: "$rating" }
+            },
+        },
+    ]);
+
+    // Create owner review map
+    const ownerReviewMap = new Map();
+    ownerReviewStats.forEach((stat) => {
+        ownerReviewMap.set(stat._id.toString(), {
+            averageRating: Math.round(stat.averageRating * 10) / 10 || 0,
+            totalReviews: stat.totalReviews || 0,
+            totalMesses: stat.totalMesses?.length || 0,
+            ratingDistribution: stat.ratingDistribution || []
+        });
+    });
+
+    // STEP 5: Get individual mess review statistics for comparison
+    const individualReviewStats = await Review.aggregate([
+        {
+            $match: { 
+                status: "active",
+                mess_id: { $in: freeMesses.map(mess => mess._id) }
+            },
         },
         {
             $group: {
@@ -609,53 +745,128 @@ const advancedSearchMess = asyncHandler(async (req, res) => {
         },
     ]);
 
-    // Create review map
-    const reviewMap = new Map();
-    reviewStats.forEach((stat) => {
-        reviewMap.set(stat._id.toString(), {
+    // Create individual mess review map
+    const individualReviewMap = new Map();
+    individualReviewStats.forEach((stat) => {
+        individualReviewMap.set(stat._id.toString(), {
             averageRating: Math.round(stat.averageRating * 10) / 10 || 0,
             totalReviews: stat.totalReviews || 0,
         });
     });
 
-    // Execute queries
-    const [messes, totalMesses] = await Promise.all([
-        MessListing.find(query)
-            .populate("owner_id", "name email phone")
-            .sort(sortOptions)
-            .skip(skip)
-            .limit(parseInt(limit))
-            .lean(),
-        MessListing.countDocuments(query),
-    ]);
+    // STEP 6: Apply search filters to free messes
+    let filteredMesses = freeMesses.filter(mess => {
+        // Filter by active owner
+        if (!mess.owner_id || mess.owner_id.isActive !== true) {
+            return false;
+        }
 
-    // Enhance mess data with rating information
-    const enhancedMesses = messes.map((mess) => {
-        const reviewInfo = reviewMap.get(mess._id.toString()) || {
+        // Apply search filters
+        if (search || location) {
+            const searchTerm = search?.toLowerCase();
+            const locationTerm = location?.toLowerCase();
+            
+            const matchesSearch = !searchTerm || 
+                mess.title?.toLowerCase().includes(searchTerm) ||
+                mess.description?.toLowerCase().includes(searchTerm);
+            
+            const matchesLocation = !locationTerm || 
+                mess.address?.toLowerCase().includes(locationTerm);
+            
+            return matchesSearch && matchesLocation;
+        }
+
+        return true;
+    });
+
+    // STEP 7: Enhance mess data with both owner-wide and individual review information
+    const enhancedMesses = filteredMesses.map((mess) => {
+        const ownerReviewInfo = ownerReviewMap.get(mess.owner_id._id.toString()) || {
+            averageRating: 0,
+            totalReviews: 0,
+            totalMesses: 0,
+            ratingDistribution: []
+        };
+
+        const individualReviewInfo = individualReviewMap.get(mess._id.toString()) || {
             averageRating: 0,
             totalReviews: 0,
         };
 
+        // Calculate rating distribution percentages
+        const ratingDistribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+        if (ownerReviewInfo.ratingDistribution.length > 0) {
+            ownerReviewInfo.ratingDistribution.forEach((rating) => {
+                ratingDistribution[rating]++;
+            });
+        }
+
         return {
             ...mess,
-            ratingInfo: reviewInfo,
+            ratingInfo: {
+                // Owner-wide statistics (across all messes)
+                ownerWideStats: {
+                    averageRating: ownerReviewInfo.averageRating,
+                    totalReviews: ownerReviewInfo.totalReviews,
+                    totalMesses: ownerReviewInfo.totalMesses,
+                    ratingDistribution: ratingDistribution,
+                    message: ownerReviewInfo.totalReviews > 0 
+                        ? `Based on ${ownerReviewInfo.totalReviews} reviews across ${ownerReviewInfo.totalMesses} mess${ownerReviewInfo.totalMesses > 1 ? 'es' : ''}`
+                        : 'No reviews yet'
+                },
+                // Individual mess statistics
+                individualMessStats: {
+                    averageRating: individualReviewInfo.averageRating,
+                    totalReviews: individualReviewInfo.totalReviews,
+                    message: individualReviewInfo.totalReviews > 0 
+                        ? `Based on ${individualReviewInfo.totalReviews} review${individualReviewInfo.totalReviews > 1 ? 's' : ''} for this mess`
+                        : 'No reviews yet for this specific mess'
+                }
+            },
+            owner_id: mess.owner_id._id,
+            owner_name: mess.owner_id.name,
+            owner_email: mess.owner_id.email,
+            owner_phone: mess.owner_id.phone,
         };
     });
 
-    // Handle rating sorting (if selected)
+    // STEP 8: Handle rating sorting (if selected)
     if (sortBy === "rating") {
         enhancedMesses.sort((a, b) => {
+            const ratingA = a.ratingInfo.ownerWideStats.averageRating;
+            const ratingB = b.ratingInfo.ownerWideStats.averageRating;
+            
             return sortOrder === "asc"
-                ? a.ratingInfo.averageRating - b.ratingInfo.averageRating
-                : b.ratingInfo.averageRating - a.ratingInfo.averageRating;
+                ? ratingA - ratingB
+                : ratingB - ratingA;
+        });
+    } else {
+        // Apply other sorts (price, date)
+        enhancedMesses.sort((a, b) => {
+            switch (sortBy) {
+                case "price":
+                    return sortOrder === "asc" 
+                        ? a.payPerMonth - b.payPerMonth 
+                        : b.payPerMonth - a.payPerMonth;
+                case "date":
+                    return sortOrder === "asc" 
+                        ? new Date(a.createdAt) - new Date(b.createdAt)
+                        : new Date(b.createdAt) - new Date(a.createdAt);
+                default:
+                    return 0;
+            }
         });
     }
+
+    // STEP 9: Apply pagination
+    const totalMesses = enhancedMesses.length;
+    const paginatedMesses = enhancedMesses.slice(skip, skip + parseInt(limit));
 
     const totalPages = Math.ceil(totalMesses / limit);
 
     return res.status(200).json(
         new ApiSuccess("Messes retrieved successfully", {
-            messes: enhancedMesses,
+            messes: paginatedMesses,
             pagination: {
                 currentPage: parseInt(page),
                 totalPages,
@@ -668,10 +879,17 @@ const advancedSearchMess = asyncHandler(async (req, res) => {
                 location: location || "",
                 sortBy,
                 sortOrder,
+                status: "free"
             },
+            reviewInfo: {
+                note: "Ratings are based on reviews across all messes by the same owner",
+                totalOwnersWithReviews: ownerReviewStats.length,
+                totalReviews: ownerReviewStats.reduce((sum, stat) => sum + stat.totalReviews, 0)
+            }
         })
     );
 });
+
 const withOutSearchSort = asyncHandler(async (req, res) => {
     const {
         sortBy = "price",

@@ -14,7 +14,6 @@ const createBooking = asyncHandler(async (req, res) => {
     const {
         mess_id,
         checkInDate,
-        advanceMonths = 1,
         paymentMethod,
         tenantName,
         tenantPhone,
@@ -39,7 +38,7 @@ const createBooking = asyncHandler(async (req, res) => {
     }
 
     // Calculate total amount
-    const totalAmount = mess.payPerMonth * advanceMonths;
+    const totalAmount = mess.payPerMonth * mess.advancePaymentMonth;
 
     // Create booking
     const booking = new Booking({
@@ -48,7 +47,7 @@ const createBooking = asyncHandler(async (req, res) => {
         owner_id: mess.owner_id,
         checkInDate: new Date(checkInDate),
         totalAmount,
-        advanceMonths: advanceMonths,
+        advanceMonths: mess?.advancePaymentMonth,
         paymentMethod,
         tenantName,
         tenantPhone,

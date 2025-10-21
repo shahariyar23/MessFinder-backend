@@ -14,7 +14,7 @@ const createReview = asyncHandler(async (req, res) => {
         rating,
         comment
     } = req.body;
-
+console.log(req.body, "from create review")
     // Validate required fields
     if (!mess_id || !booking_id || !rating || !comment) {
         throw new ApiError(400, "All fields are required");
@@ -195,6 +195,151 @@ const getUserReviews = asyncHandler(async (req, res) => {
                 totalReviews,
                 hasNext: page < totalPages,
                 hasPrev: page > 1
+            }
+        })
+    );
+});
+
+// Get user's review status for all bookings
+const getUserReviewStatus = asyncHandler(async (req, res) => {
+    const { page = 1, limit = 10 } = req.query;
+    const skip = (page - 1) * limit;
+    const userId = req.user.id;
+
+    // Step 1: Find all bookings for the user
+    const [bookings, totalBookings] = await Promise.all([
+        Booking.find({ user_id: userId })
+            .populate('mess_id', 'title address images roomType payPerMonth')
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(parseInt(limit))
+            .lean(),
+        Booking.countDocuments({ user_id: userId })
+    ]);
+
+    if (bookings.length === 0) {
+        return res.status(200).json(
+            new ApiSuccess("No bookings found", {
+                bookings: [],
+                reviewStatus: [],
+                pagination: {
+                    currentPage: parseInt(page),
+                    totalPages: 0,
+                    totalBookings: 0,
+                    hasNext: false,
+                    hasPrev: false
+                },
+                summary: {
+                    totalBookings: 0,
+                    canReviewCount: 0,
+                    reviewedCount: 0
+                }
+            })
+        );
+    }
+
+    // Step 2: Find reviews for these bookings
+    const bookingIds = bookings.map(booking => booking._id);
+    const messIds = bookings.map(booking => booking.mess_id._id);
+
+    const reviews = await Review.find({
+        user_id: userId,
+        $or: [
+            { booking_id: { $in: bookingIds } },
+            { mess_id: { $in: messIds } }
+        ]
+    }).lean();
+
+    // Create maps for quick lookup
+    const reviewByBookingMap = new Map();
+    const reviewByMessMap = new Map();
+    
+    reviews.forEach(review => {
+        if (review.booking_id) {
+            reviewByBookingMap.set(review.booking_id.toString(), review);
+        }
+        if (review.mess_id) {
+            reviewByMessMap.set(review.mess_id.toString(), review);
+        }
+    });
+
+    // Step 3: Prepare response with review status for each booking
+    const reviewStatus = bookings.map(booking => {
+        const bookingIdStr = booking._id.toString();
+        const messIdStr = booking.mess_id._id.toString();
+
+        // Check if review exists for this booking or mess
+        const reviewForBooking = reviewByBookingMap.get(bookingIdStr);
+        const reviewForMess = reviewByMessMap.get(messIdStr);
+        
+        const hasReview = !!(reviewForBooking || reviewForMess);
+        const existingReview = reviewForBooking || reviewForMess;
+
+        // Determine if user can review
+        const canReview = (
+            (booking.bookingStatus === "completed" || booking.bookingStatus === "confirmed") &&
+            !hasReview
+        );
+
+        let reviewDetails = null;
+        if (existingReview) {
+            reviewDetails = {
+                id: existingReview._id,
+                rating: existingReview.rating,
+                comment: existingReview.comment,
+                createdAt: existingReview.createdAt,
+                canEdit: true,
+                reviewedFor: reviewForBooking ? 'this_booking' : 'this_mess'
+            };
+        }
+
+        return {
+            booking_id: booking._id,
+            mess_id: booking.mess_id._id,
+            messTitle: booking.mess_id.title,
+            messAddress: booking.mess_id.address,
+            messImage: booking.mess_id.images?.[0] || null,
+            roomType: booking.mess_id.roomType,
+            payPerMonth: booking.mess_id.payPerMonth,
+            checkInDate: booking.checkInDate,
+            checkOutDate: booking.checkOutDate,
+            bookingStatus: booking.bookingStatus,
+            createdAt: booking.createdAt,
+            
+            // Review Information
+            hasReview,
+            canReview,
+            existingReview: reviewDetails,
+            
+            // Requirements status
+            requirements: {
+                bookingCompleted: booking.bookingStatus === "completed" || booking.bookingStatus === "confirmed",
+                notReviewed: !hasReview
+            }
+        };
+    });
+
+    // Count statistics
+    const canReviewCount = reviewStatus.filter(item => item.canReview).length;
+    const reviewedCount = reviewStatus.filter(item => item.hasReview).length;
+
+    const totalPages = Math.ceil(totalBookings / limit);
+
+    return res.status(200).json(
+        new ApiSuccess("User review status retrieved successfully", {
+            bookings: reviewStatus,
+            pagination: {
+                currentPage: parseInt(page),
+                totalPages,
+                totalBookings,
+                hasNext: page < totalPages,
+                hasPrev: page > 1
+            },
+            summary: {
+                totalBookings,
+                canReviewCount,
+                reviewedCount,
+                message: `You have ${canReviewCount} booking(s) that can be reviewed and ${reviewedCount} reviewed booking(s)`
             }
         })
     );
@@ -430,5 +575,6 @@ export {
     updateReview,
     deleteReview,
     reportReview,
-    getMessReviewStats
+    getMessReviewStats,
+    getUserReviewStatus
 };
