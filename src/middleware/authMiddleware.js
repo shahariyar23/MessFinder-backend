@@ -8,7 +8,7 @@ export const authMiddleware = asyncHandler(async (req, res, next) => {
         const token = req.cookies?.token || 
                      req.headers.authorization?.replace('Bearer ', '');
         
-        console.log('Auth Middleware - Token received:', token ? 'Yes' : 'No');
+        console.log(req.cookies.token, "auth midlleware");
 
         if (!token) {
             throw new ApiError(401, "No token provided");

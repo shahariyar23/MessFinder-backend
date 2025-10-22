@@ -11,19 +11,40 @@ const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
       'http://localhost:5173',
-      process.env.FRONTEND_URL // Your Vercel URL from environment variable
-    ].filter(Boolean); // Remove any undefined values
+      process.env.FRONTEND_URL,
+      // Add pattern for Vercel preview deployments
+      /\.vercel\.app$/
+    ].filter(Boolean);
     
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
+    console.log('CORS Origin Check:', {
+      incomingOrigin: origin,
+      allowedOrigins: allowedOrigins
+    });
+    
+    if (!origin) {
+      return callback(null, true);
     }
+    
+    // Check exact match first
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    
+    // Check regex patterns
+    for (const pattern of allowedOrigins) {
+      if (pattern instanceof RegExp && pattern.test(origin)) {
+        console.log('CORS: Regex match allowed -', origin);
+        return callback(null, true);
+      }
+    }
+    
+    console.log('CORS: Origin blocked -', origin);
+    callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'X-Requested-With'],
+  exposedHeaders: ['Set-Cookie']
 };
 app.use(cors(corsOptions));
 app.use(express.json({limit: '10mb'}));
@@ -58,6 +79,33 @@ app.use("/api/v1/payment", paymentRoute);
 
 app.route('/', (req, res) => {
     res.send('Welcome to Mess Management System API');
+});
+
+
+
+// Health check route
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    frontendUrl: process.env.FRONTEND_URL,
+    corsConfig: {
+      allowedOrigins: [
+        'http://localhost:5173',
+        process.env.FRONTEND_URL
+      ].filter(Boolean)
+    }
+  });
+});
+
+// Test CORS route
+app.get('/test-cors', (req, res) => {
+  res.json({
+    message: 'CORS is working!',
+    origin: req.headers.origin,
+    cookies: req.cookies
+  });
 });
 
 
