@@ -11,42 +11,47 @@ const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = [
       'http://localhost:5173',
-      process.env.FRONTEND_URL,
-      // Add pattern for Vercel preview deployments
+      'https://mess-finder-frontend.vercel.app', // Remove trailing slash
       /\.vercel\.app$/
     ].filter(Boolean);
     
     console.log('CORS Origin Check:', {
       incomingOrigin: origin,
-      allowedOrigins: allowedOrigins
+      allowedOrigins: allowedOrigins,
+      userAgent: req.headers['user-agent'] // Add this for debugging
     });
     
+    // Allow requests with no origin (direct access, server-to-server, etc.)
     if (!origin) {
+      console.log('CORS: No origin - allowing request (direct access)');
       return callback(null, true);
     }
     
-    // Check exact match first
+    // Check exact matches
     if (allowedOrigins.includes(origin)) {
+      console.log('CORS: Exact match - allowing origin:', origin);
       return callback(null, true);
     }
     
     // Check regex patterns
     for (const pattern of allowedOrigins) {
       if (pattern instanceof RegExp && pattern.test(origin)) {
-        console.log('CORS: Regex match allowed -', origin);
+        console.log('CORS: Regex match - allowing origin:', origin);
         return callback(null, true);
       }
     }
     
-    console.log('CORS: Origin blocked -', origin);
-    callback(new Error('Not allowed by CORS'));
+    console.log('CORS: Blocked origin:', origin);
+    callback(new Error(`Not allowed by CORS. Origin: ${origin}`));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'Cache-Control', 'Pragma', 'X-Requested-With'],
   exposedHeaders: ['Set-Cookie']
 };
+
 app.use(cors(corsOptions));
+app.options('/api/v1/user/check-auth', cors(corsOptions));
 app.use(express.json({limit: '10mb'}));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(express.static('public'));
