@@ -78,7 +78,7 @@ app.use("/api/v1/request", requestRoute);
 app.use("/api/v1/payment", paymentRoute);
 
 app.route('/', (req, res) => {
-    res.send('Welcome to Mess Management System API');
+    res.json('Welcome to Mess Management System API');
 });
 
 
