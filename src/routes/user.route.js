@@ -25,7 +25,6 @@ userRouter.route("/logout").post(logout);
 userRouter.route("/forgot-password").post(generateResetCode);
 userRouter.route("/verify-code").post(verifyResetCode);
 userRouter.route("/reset-password").post(resetPassword);
-userRouter.route("/get-students").get(authMiddleware, getAllStudents);
 userRouter.route("/get-student-id/:id").get(authMiddleware, getStudentById);
 userRouter.route("/get-owners").get(authMiddleware, getAllOwners);
 

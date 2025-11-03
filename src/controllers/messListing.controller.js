@@ -2,6 +2,7 @@ import asyncHandler from "../utils/asyncHandler.js";
 import ApiError from "../utils/ApiError.js";
 import ApiSuccess from "../utils/ApiSuccess.js";
 import MessListing from "../models/messListing.model.js";
+import fs from "fs"
 import {
     deleteFromCloudinary,
     uploadToCloudinary,
@@ -10,103 +11,188 @@ import mongoose from "mongoose";
 import Review from "../models/review.model.js";
 
 const addMess = asyncHandler(async (req, res) => {
-    const {
-        title,
-        description,
-        address,
-        availableFrom,
-        advancePaymentMonth = 1,
-        payPerMonth,
-        facilities = [],
-        roomType,
-        roomFeatures,
-        genderPreference,
-        contact,
-    } = req.body;
-    console.log(req.body);
-    // Validation checks
-    const errors = [];
+    try {
+        const {
+            title,
+            description,
+            address,
+            availableFrom,
+            advancePaymentMonth = 1,
+            payPerMonth,
+            facilities = [],
+            roomType,
+            roomFeatures,
+            genderPreference,
+            contact,
+        } = req.body;
 
-    if (!title?.trim()) errors.push("Title is required");
-    if (!description?.trim()) errors.push("Description is required");
-    if (description?.trim().length < 6)
-        errors.push("Description must be at least 6 characters");
-    if (!address?.trim()) errors.push("Address is required");
-    if (!availableFrom) errors.push("Available from date is required");
-    if (!payPerMonth) errors.push("Pay per month is required");
-    if (!roomType) errors.push("Room type is required");
-    if (!roomFeatures) errors.push("Room features are required");
-    if (!genderPreference) errors.push("Gender preference is required");
-    if (!contact?.trim()) errors.push("Contact information is required");
+        console.log("=== ADD MESS DEBUG ===");
+        console.log("Request files:", req.files);
+        console.log("Request body:", req.body);
+        console.log("User:", req.user);
 
-    // Check if user is owner
-    if (req.user.role !== "owner") {
-        throw new ApiError(403, "Only owners can create mess listings");
-    }
+        // Validation checks
+        const errors = [];
 
-    // Validate images
-    if (!req.files || req.files.length !== 3) {
-        throw new ApiError(400, "Exactly 3 images are required");
-    }
+        if (!title?.trim()) errors.push("Title is required");
+        if (!description?.trim()) errors.push("Description is required");
+        if (description?.trim().length < 6)
+            errors.push("Description must be at least 6 characters");
+        if (!address?.trim()) errors.push("Address is required");
+        if (!availableFrom) errors.push("Available from date is required");
+        if (!payPerMonth) errors.push("Pay per month is required");
+        if (!roomType) errors.push("Room type is required");
+        if (!roomFeatures) errors.push("Room features are required");
+        if (!genderPreference) errors.push("Gender preference is required");
+        if (!contact?.trim()) errors.push("Contact information is required");
 
-    // Upload each image to Cloudinary
-    const imageUploadPromises = req.files.map((file) =>
-        uploadToCloudinary(file.path)
-    );
-
-    const cloudinaryResults = await Promise.all(imageUploadPromises);
-
-    // Create array of objects with url and public_id
-    const images = cloudinaryResults.map((result) => ({
-        url: result.secure_url,
-        public_id: result.public_id,
-    }));
-
-    // Check if all uploads were successful
-    const failedUploads = cloudinaryResults.filter((result) => !result);
-    if (failedUploads.length > 0) {
-        throw new ApiError(500, "Some images failed to upload");
-    }
-
-    // Parse facilities
-    let facilitiesArray = facilities;
-    if (typeof facilities === "string") {
-        try {
-            facilitiesArray = JSON.parse(facilities);
-        } catch (parseError) {
-            throw new ApiError(400, "Invalid facilities format");
+        if (errors.length > 0) {
+            console.log("Validation errors:", errors);
+            throw new ApiError(400, errors.join(", "));
         }
-    }
 
-    // Create new mess listing
-    const newMess = new MessListing({
-        title: title.trim(),
-        description: description.trim(),
-        owner_id: req?.user?.id,
-        address: address.trim(),
-        availableFrom: new Date(availableFrom),
-        advancePaymentMonth: parseInt(advancePaymentMonth) || 1,
-        payPerMonth: parseFloat(payPerMonth),
-        facilities: facilitiesArray,
-        roomType,
-        roomFeatures,
-        genderPreference,
-        contact: contact.trim(),
-        image: images, // This will be the array of 3 image paths
-        status: "free",
-    });
+        // Check if user is owner
+        if (req.user.role !== "owner") {
+            console.log("User is not owner, role:", req.user.role);
+            throw new ApiError(403, "Only owners can create mess listings");
+        }
 
-    await newMess.save();
+        // Validate images
+        if (!req.files || req.files.length === 0) {
+            console.log("No files received");
+            throw new ApiError(400, "At least one image is required");
+        }
 
-    // Populate owner info
-    await newMess.populate("owner_id", "name email phone");
+        if (req.files.length !== 3) {
+            console.log(`Expected 3 files, got ${req.files.length}`);
+            throw new ApiError(400, "Exactly 3 images are required");
+        }
 
-    // Images are successfully saved, DO NOT delete them
-    return res
-        .status(201)
-        .json(
+        // Check if files are valid images
+        const invalidFiles = req.files.filter(file => !file.mimetype.startsWith('image/'));
+        if (invalidFiles.length > 0) {
+            console.log("Invalid files detected:", invalidFiles);
+            throw new ApiError(400, "Only image files are allowed");
+        }
+
+        console.log("Uploading images to Cloudinary...");
+
+        // Upload each image to Cloudinary
+        const imageUploadPromises = req.files.map((file) => {
+            console.log(`Uploading file: ${file.path}`);
+            return uploadToCloudinary(file.path);
+        });
+
+        const cloudinaryResults = await Promise.all(imageUploadPromises);
+        console.log("Cloudinary results:", cloudinaryResults);
+
+        // Check for failed uploads
+        const failedUploads = cloudinaryResults.filter((result) => !result || !result.secure_url);
+        if (failedUploads.length > 0) {
+            console.log("Failed uploads:", failedUploads);
+            throw new ApiError(500, "Some images failed to upload to Cloudinary");
+        }
+
+        // Create array of objects with url and public_id
+        const images = cloudinaryResults.map((result) => ({
+            url: result.secure_url,
+            public_id: result.public_id,
+        }));
+
+        console.log("Uploaded images:", images);
+
+        // Parse facilities if it's a string
+        let facilitiesArray = facilities;
+        if (typeof facilities === "string") {
+            try {
+                facilitiesArray = JSON.parse(facilities);
+            } catch (parseError) {
+                console.log("Facilities parse error, using as array:", facilities);
+                facilitiesArray = Array.isArray(facilities) ? facilities : [facilities];
+            }
+        }
+
+        // Ensure facilities is an array
+        if (!Array.isArray(facilitiesArray)) {
+            facilitiesArray = [facilitiesArray];
+        }
+
+        // Parse roomFeatures if it's a string
+        let roomFeaturesArray = roomFeatures;
+        if (typeof roomFeatures === "string") {
+            try {
+                roomFeaturesArray = JSON.parse(roomFeatures);
+            } catch (parseError) {
+                console.log("Room features parse error, using as array:", roomFeatures);
+                roomFeaturesArray = Array.isArray(roomFeatures) ? roomFeatures : [roomFeatures];
+            }
+        }
+
+        // Ensure roomFeatures is an array
+        if (!Array.isArray(roomFeaturesArray)) {
+            roomFeaturesArray = [roomFeaturesArray];
+        }
+
+        console.log("Creating new mess listing...");
+
+        // Create new mess listing
+        const newMess = new MessListing({
+            title: title.trim(),
+            description: description.trim(),
+            owner_id: req.user.id,
+            address: address.trim(),
+            availableFrom: new Date(availableFrom),
+            advancePaymentMonth: parseInt(advancePaymentMonth) || 1,
+            payPerMonth: parseFloat(payPerMonth),
+            facilities: facilitiesArray,
+            roomType,
+            roomFeatures: roomFeaturesArray,
+            genderPreference,
+            contact: contact.trim(),
+            image: images,
+            status: "free",
+        });
+
+        console.log("Saving to database...");
+        await newMess.save();
+        console.log("Saved successfully, ID:", newMess._id);
+
+        // Populate owner info
+        await newMess.populate("owner_id", "name email phone");
+        console.log("Populated owner info");
+
+        // Clean up uploaded files from server
+        req.files.forEach(file => {
+            if (fs.existsSync(file.path)) {
+                fs.unlinkSync(file.path);
+                console.log("Cleaned up file:", file.path);
+            }
+        });
+
+        console.log("Sending success response...");
+        return res.status(201).json(
             new ApiSuccess("Mess listing created successfully", newMess, 201)
         );
+
+    } catch (error) {
+        console.error("❌ ERROR in addMess controller:", error);
+        console.error("Error message:", error.message);
+        console.error("Error stack:", error.stack);
+        
+        // Clean up files if error occurred
+        if (req.files) {
+            const fs = require('fs');
+            req.files.forEach(file => {
+                if (fs.existsSync(file.path)) {
+                    fs.unlinkSync(file.path);
+                    console.log("Cleaned up file after error:", file.path);
+                }
+            });
+        }
+        
+        // Make sure to throw the error so asyncHandler can handle it
+        throw error;
+    }
 });
 
 const updateMess = asyncHandler(async (req, res) => {

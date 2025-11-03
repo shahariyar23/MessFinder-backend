@@ -231,51 +231,218 @@ const modifyOwner = asyncHandler(async (req, res) => {
 
 // Get user statistics (Admin only)
 const getUserStatistics = asyncHandler(async (req, res) => {
-     // Check if current user is admin
+    // Check if current user is admin
     if (req.user.role !== "admin") {
-        throw new ApiError(403, "Access denied. Only admin can delete owners.");
+        throw new ApiError(403, "Access denied. Only admin can access statistics.");
     }
-    const stats = await User.aggregate([
-        {
-            $group: {
-                _id: "$role",
-                count: { $sum: 1 },
-                activeUsers: {
-                    $sum: { $cond: [{ $eq: ["$isActive", true] }, 1, 0] },
-                },
-                inactiveUsers: {
-                    $sum: { $cond: [{ $eq: ["$isActive", false] }, 1, 0] },
+
+    try {
+        // User Statistics
+        const userStats = await User.aggregate([
+            {
+                $group: {
+                    _id: "$role",
+                    count: { $sum: 1 },
+                    activeUsers: {
+                        $sum: { $cond: [{ $eq: ["$isActive", true] }, 1, 0] },
+                    },
+                    inactiveUsers: {
+                        $sum: { $cond: [{ $eq: ["$isActive", false] }, 1, 0] },
+                    },
                 },
             },
-        },
-    ]);
+        ]);
 
-    const totalStats = await User.aggregate([
-        {
-            $group: {
-                _id: null,
-                totalUsers: { $sum: 1 },
-                totalActive: {
-                    $sum: { $cond: [{ $eq: ["$isActive", true] }, 1, 0] },
+        const totalUserStats = await User.aggregate([
+            {
+                $group: {
+                    _id: null,
+                    totalUsers: { $sum: 1 },
+                    totalActive: {
+                        $sum: { $cond: [{ $eq: ["$isActive", true] }, 1, 0] },
+                    },
+                    latestUser: { $max: "$createdAt" },
                 },
-                latestUser: { $max: "$createdAt" },
             },
-        },
-    ]);
+        ]);
 
-    const statistics = {
-        byRole: stats.reduce((acc, curr) => {
-            acc[curr._id] = curr;
-            return acc;
-        }, {}),
-        overall: totalStats[0] || { totalUsers: 0, totalActive: 0 },
-    };
+        // Mess Listing Statistics
+        const messStats = await MessListing.aggregate([
+            {
+                $group: {
+                    _id: "$status",
+                    count: { $sum: 1 },
+                },
+            },
+        ]);
 
-    return res
-        .status(200)
-        .json(
-            new ApiSuccess("User statistics retrieved successfully", statistics)
+        const totalMessStats = await MessListing.aggregate([
+            {
+                $group: {
+                    _id: null,
+                    totalListings: { $sum: 1 },
+                    totalViews: { $sum: "$view" },
+                    avgPrice: { $avg: "$payPerMonth" },
+                    latestListing: { $max: "$createdAt" },
+                },
+            },
+        ]);
+
+        // Mess Listings by Location
+        const locationStats = await MessListing.aggregate([
+            {
+                $match: {
+                    address: { $exists: true, $ne: "" }
+                }
+            },
+            {
+                $group: {
+                    _id: {
+                        $toLower: {
+                            $substrCP: [
+                                "$address",
+                                0,
+                                20
+                            ]
+                        }
+                    },
+                    count: { $sum: 1 },
+                },
+            },
+            {
+                $sort: { count: -1 }
+            },
+            {
+                $limit: 5
+            }
+        ]);
+
+        // Track mess listing updates and status changes
+const recentActivities = await MessListing.aggregate([
+    {
+        $sort: { updatedAt: -1 }
+    },
+    {
+        $limit: 10
+    },
+    {
+        $lookup: {
+            from: "users",
+            localField: "owner_id",
+            foreignField: "_id",
+            as: "owner"
+        }
+    },
+    {
+        $unwind: "$owner"
+    },
+    {
+        $project: {
+            user: "$owner.name",
+            action: {
+                $cond: {
+                    if: { $eq: ["$createdAt", "$updatedAt"] },
+                    then: "Created new mess listing",
+                    else: {
+                        $switch: {
+                            branches: [
+                                { 
+                                    case: { $ne: ["$status", "$previousStatus"] }, 
+                                    then: {
+                                        $concat: [
+                                            "Changed status to ",
+                                            "$status"
+                                        ]
+                                    }
+                                },
+                                { 
+                                    case: { $ne: ["$payPerMonth", "$previousPrice"] }, 
+                                    then: "Updated pricing"
+                                },
+                                { 
+                                    case: { $ne: ["$facilities", "$previousFacilities"] }, 
+                                    then: "Updated facilities"
+                                }
+                            ],
+                            default: "Updated mess listing"
+                        }
+                    }
+                }
+            },
+            time: "$updatedAt",
+            title: "$title",
+            type: "listing_update",
+            changes: {
+                $cond: {
+                    if: { $eq: ["$createdAt", "$updatedAt"] },
+                    then: "creation",
+                    else: "update"
+                }
+            }
+        }
+    }
+]);
+
+        // Monthly growth for mess listings
+        const monthlyGrowth = await MessListing.aggregate([
+            {
+                $group: {
+                    _id: {
+                        year: { $year: "$createdAt" },
+                        month: { $month: "$createdAt" }
+                    },
+                    count: { $sum: 1 }
+                }
+            },
+            {
+                $sort: { "_id.year": -1, "_id.month": -1 }
+            },
+            {
+                $limit: 6
+            }
+        ]);
+
+        const statistics = {
+            users: {
+                byRole: userStats.reduce((acc, curr) => {
+                    acc[curr._id] = curr;
+                    return acc;
+                }, {}),
+                overall: totalUserStats[0] || { 
+                    totalUsers: 0, 
+                    totalActive: 0,
+                    latestUser: null 
+                },
+            },
+            messListings: {
+                byStatus: messStats.reduce((acc, curr) => {
+                    acc[curr._id] = curr.count;
+                    return acc;
+                }, {}),
+                overall: totalMessStats[0] || {
+                    totalListings: 0,
+                    totalViews: 0,
+                    avgPrice: 0,
+                    latestListing: null
+                },
+                byLocation: locationStats,
+                monthlyGrowth: monthlyGrowth,
+            },
+            recentActivities: recentActivities.map(activity => ({
+                user: activity.user,
+                action: activity.action,
+                time: activity.time,
+                title: activity.title
+            }))
+        };
+
+        return res.status(200).json(
+            new ApiSuccess("Statistics retrieved successfully", statistics)
         );
+    } catch (error) {
+        console.error("Error fetching statistics:", error);
+        throw new ApiError(500, "Failed to retrieve statistics");
+    }
 });
 
 // Bulk user actions (Admin only)
