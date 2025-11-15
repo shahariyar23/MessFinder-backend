@@ -25,7 +25,7 @@ const initiateSSLCommerzPayment = asyncHandler(async (req, res) => {
     const { bookingId, customerInfo } = req.body;
 
     const booking = await Booking.findById(bookingId).populate("mess_id");
-    console.log("Booking found:", booking);
+    //console.log("Booking found:", booking);
 
     if (!booking) {
         throw new ApiError(404, "Booking not found");
@@ -69,12 +69,12 @@ const initiateSSLCommerzPayment = asyncHandler(async (req, res) => {
         value_d: booking.mess_id?._id.toString() || "unknown", // Mess ID
     };
 
-    console.log("SSL Commerz Payment Data:", {
-        transactionId: data.tran_id,
-        amount: data.total_amount,
-        customer: data.cus_name,
-        product: data.product_name,
-    });
+    //console.log("SSL Commerz Payment Data:", {
+    //     transactionId: data.tran_id,
+    //     amount: data.total_amount,
+    //     customer: data.cus_name,
+    //     product: data.product_name,
+    // });
 
     const sslcz = new SSLCommerzPayment(
         process.env.SSL_APP_STORE_ID,
@@ -96,10 +96,10 @@ const initiateSSLCommerzPayment = asyncHandler(async (req, res) => {
         booking.paymentInitiatedAt = new Date();
         await booking.save();
 
-        console.log("Payment initiated successfully:", {
-            transactionId: data.tran_id,
-            paymentUrl: apiResponse.GatewayPageURL,
-        });
+        //console.log("Payment initiated successfully:", {
+        //     transactionId: data.tran_id,
+        //     paymentUrl: apiResponse.GatewayPageURL,
+        // });
 
         return res.status(200).json(
             new ApiSuccess("Payment initiated successfully", {
@@ -119,7 +119,7 @@ const initiateSSLCommerzPayment = asyncHandler(async (req, res) => {
 const handleSSLIPN = asyncHandler(async (req, res) => {
     const paymentData = req.body;
 
-    console.log("SSL IPN Received - Full body:", req.body);
+    //console.log("SSL IPN Received - Full body:", req.body);
 
     try {
         // Validate the payment
@@ -159,12 +159,12 @@ const handleSSLIPN = asyncHandler(async (req, res) => {
                     await session.commitTransaction();
                     session.endSession();
 
-                    console.log("✅ Payment verified and booking updated:", {
-                        transactionId: paymentData.tran_id,
-                        bookingId: booking._id,
-                        status: "paid",
-                        messStatus: "booked",
-                    });
+                    //console.log("✅ Payment verified and booking updated:", {
+                    //     transactionId: paymentData.tran_id,
+                    //     bookingId: booking._id,
+                    //     status: "paid",
+                    //     messStatus: "booked",
+                    // });
 
                     // ✅ SEND PAYMENT SUCCESS EMAIL
                     try {
@@ -183,10 +183,10 @@ const handleSSLIPN = asyncHandler(async (req, res) => {
                             monthlyRent: booking.mess_id?.payPerMonth,
                             roomType: booking.mess_id?.roomType, // Add if available in your model
                         });
-                        console.log(
-                            "✅ Payment success email sent to:",
-                            booking.tenantEmail
-                        );
+                        //console.log(
+                        //     "✅ Payment success email sent to:",
+                        //     booking.tenantEmail
+                        // );
                     } catch (emailError) {
                         console.error(
                             "❌ Failed to send payment success email:",
@@ -213,7 +213,7 @@ const handleSSLIPN = asyncHandler(async (req, res) => {
                 booking.paymentDetails = paymentData;
                 await booking.save();
 
-                console.log("💔 Payment failed:", paymentData.tran_id);
+                //console.log("💔 Payment failed:", paymentData.tran_id);
             }
         }
 
@@ -234,7 +234,7 @@ const handleSSLIPN = asyncHandler(async (req, res) => {
 const autoConfirmPayment = asyncHandler(async (req, res) => {
     const { transactionId } = req.body;
 
-    console.log(" Auto-confirming payment:", transactionId);
+    //console.log(" Auto-confirming payment:", transactionId);
 
     try {
         const booking = await Booking.findOne({ transactionId })
@@ -278,14 +278,14 @@ const autoConfirmPayment = asyncHandler(async (req, res) => {
                 await session.commitTransaction();
                 session.endSession();
 
-                console.log(
-                    "✅ Auto-confirmed payment and updated mess status:",
-                    {
-                        transactionId: transactionId,
-                        messId: booking.mess_id._id,
-                        messStatus: "booked",
-                    }
-                );
+                //console.log(
+                    // "✅ Auto-confirmed payment and updated mess status:",
+                    // {
+                    //     transactionId: transactionId,
+                    //     messId: booking.mess_id._id,
+                    //     messStatus: "booked",
+                    // }
+                // );
 
                 // ✅ SEND PAYMENT SUCCESS EMAIL FOR AUTO-CONFIRM
                 try {
@@ -303,10 +303,10 @@ const autoConfirmPayment = asyncHandler(async (req, res) => {
                         monthlyRent: booking.mess_id?.payPerMonth,
                         roomType: booking.mess_id?.roomType, // Add if available in your model
                     });
-                    console.log(
-                        "✅ Payment success email sent to:",
-                        booking.tenantEmail
-                    );
+                    // //console.log(
+                    //     "✅ Payment success email sent to:",
+                    //     booking.tenantEmail
+                    // );
                 } catch (emailError) {
                     console.error(
                         "❌ Failed to send payment success email:",

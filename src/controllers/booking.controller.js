@@ -21,7 +21,13 @@ const createBooking = asyncHandler(async (req, res) => {
         payAbleAmount,
         emergencyContact
     } = req.body;
-
+    const user = await User.findById(req.user.id);
+    if(!user){
+        throw new ApiError(404, "User not found!!")
+    }
+    if(user.isActive !== true){
+        throw new ApiError(403, `${user.name} is suspended`)
+    }
     // Validate required fields
     if (!mess_id || !checkInDate || !tenantName || !tenantPhone || !tenantEmail || !payAbleAmount) {
         throw new ApiError(400, "All required fields must be provided");

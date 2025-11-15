@@ -7,7 +7,7 @@ import asyncHandler from "../utils/asyncHandler.js";
 
 const getMessesByOwnerId = asyncHandler(async (req, res) => {
     const { ownerId } = req.params;
-    console.log(req.params)
+    //console.log(req.params)
     const { page = 1, limit = 10, status } = req.query;
 
     // Validate ownerId
@@ -164,7 +164,7 @@ const updateMessStatus = asyncHandler(async (req, res) => {
         }
 
         // Log the status change (optional)
-        console.log(`Mess ${mess_id} status changed from ${existingMess.status} to ${status} by owner ${owner_id}`);
+        //console.log(`Mess ${mess_id} status changed from ${existingMess.status} to ${status} by owner ${owner_id}`);
 
         return res.status(200).json(
             new ApiSuccess("Mess status updated successfully", {

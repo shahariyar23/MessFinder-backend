@@ -14,7 +14,7 @@ const createReview = asyncHandler(async (req, res) => {
         rating,
         comment
     } = req.body;
-console.log(req.body, "from create review")
+//console.log(req.body, "from create review")
     // Validate required fields
     if (!mess_id || !booking_id || !rating || !comment) {
         throw new ApiError(400, "All fields are required");

@@ -115,7 +115,7 @@ export const generatePaymentReceiptPDF = (paymentData, outputPath) => {
             doc.end();
 
             writeStream.on('finish', () => {
-                console.log('PDF generated successfully:', outputPath);
+                //console.log('PDF generated successfully:', outputPath);
                 resolve(outputPath);
             });
 

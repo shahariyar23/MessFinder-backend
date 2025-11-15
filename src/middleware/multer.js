@@ -1,5 +1,6 @@
 // middleware/uploadMiddleware.js
 import multer from 'multer';
+import fs from 'fs/promises';
 
 // Keep your existing disk storage
 const storage = multer.diskStorage({
@@ -26,3 +27,21 @@ export const upload = multer({
         }
     }
 });
+
+// Cleanup utility function
+export const cleanupUploadedFiles = async (files) => {
+    if (!files || files.length === 0) return;
+    
+    const cleanupPromises = files.map(async (file) => {
+        try {
+            if (file.path) {
+                await fs.unlink(file.path);
+                console.log(`✅ Cleaned up local file: ${file.path}`);
+            }
+        } catch (error) {
+            console.error(`❌ Failed to clean up local file: ${file.path}`, error);
+        }
+    });
+
+    await Promise.all(cleanupPromises);
+};

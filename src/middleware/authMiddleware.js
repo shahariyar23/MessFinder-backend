@@ -8,7 +8,7 @@ export const authMiddleware = asyncHandler(async (req, res, next) => {
         const token = req.cookies?.token || 
                      req.headers.authorization?.replace('Bearer ', '');
         
-        console.log(req.cookies.token, "auth midlleware");
+        //console.log(req.cookies.token, "auth midlleware");
 
         if (!token) {
             throw new ApiError(401, "No token provided");
@@ -16,12 +16,12 @@ export const authMiddleware = asyncHandler(async (req, res, next) => {
 
         // Verify token
         const decoded = jwt.verify(token, process.env.JWT_SECRET);
-        console.log('Auth Middleware - Token decoded for user:', decoded.id);
+        //console.log('Auth Middleware - Token decoded for user:', decoded.id);
         
         req.user = decoded;
         next();
     } catch (error) {
-        console.log('Auth Middleware Error:', error.message);
+        //console.log('Auth Middleware Error:', error.message);
         
         if (error.name === 'JsonWebTokenError') {
             throw new ApiError(401, "Invalid token");

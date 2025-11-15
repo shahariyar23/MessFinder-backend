@@ -12,7 +12,7 @@ const addRequest = asyncHandler(async (req, res) => {
     const { ownerId } = req.query;
     const userId = req.user.id;
 
-    console.log(userId, "ownerId", ownerId, "Mess id:", messId);
+    //console.log(userId, "ownerId", ownerId, "Mess id:", messId);
 
     // Check if mess exists
     const mess = await MessListing.findById(messId);
@@ -99,7 +99,7 @@ const addRequest = asyncHandler(async (req, res) => {
             };
 
             await sendRequestStatusUpdateToOwner(owner.email, requestData);
-            console.log('Viewing request notification sent to owner:', owner.email);
+            //console.log('Viewing request notification sent to owner:', owner.email);
         }
     } catch (emailError) {
         console.error('Failed to send email notification:', emailError);
@@ -161,7 +161,7 @@ const updateRequestStatus = asyncHandler(async (req, res) => {
         if (mess) {
             mess.status = "pending";
             await mess.save();
-            console.log(`✅ Mess status updated to "pending" for mess: ${mess.title}`);
+            //console.log(`✅ Mess status updated to "pending" for mess: ${mess.title}`);
         }
     }
 
@@ -199,7 +199,7 @@ const updateRequestStatus = asyncHandler(async (req, res) => {
                 updateDate: new Date()
             }
         );
-        console.log(`✅ Status update email sent to: ${viewRequest.userId.email}`);
+        //console.log(`✅ Status update email sent to: ${viewRequest.userId.email}`);
     } catch (emailError) {
         console.error('❌ Failed to send status update email:', emailError);
         // Don't throw error, just log it
@@ -276,7 +276,7 @@ const getAllRequests = asyncHandler(async (req, res) => {
     const ownerId = req.user.id;
     const { page = 1, limit = 10 } = req.query;
     
-    console.log('Owner ID:', ownerId);
+    //console.log('Owner ID:', ownerId);
 
     // Validate page and limit
     const pageNum = parseInt(page);
@@ -492,7 +492,7 @@ const getRequestsByMess = asyncHandler(async (req, res) => {
 // Optional: Get user's own requests (for regular users)
 const getMyRequests = asyncHandler(async (req, res) => {
     const userId = req.user.id;
-    console.log("User id in my requests:", userId);
+    //console.log("User id in my requests:", userId);
     const { page = 1, limit = 10, status } = req.query;
 
     const pageNum = parseInt(page);

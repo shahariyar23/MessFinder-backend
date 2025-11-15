@@ -110,7 +110,7 @@ const login = asyncHandler(async (req, res) => {
                     loginAttempts: user.loginAttempts,
                     contactEmail: 'support@messfinder.com'
                 });
-                console.log(`🚫 Account deactivated email sent to: ${user.email}`);
+                //console.log(`🚫 Account deactivated email sent to: ${user.email}`);
             } catch (emailError) {
                 console.error('❌ Failed to send account deactivated email:', emailError);
                 // Don't throw error, just log it
@@ -178,12 +178,12 @@ const logout = asyncHandler((req, res) => {
 const generateResetCode = asyncHandler(async (req, res) => {
     let { email } = req.body;
 
-    console.log('Received email:', email);
-    console.log('Type of email:', typeof email);
+    //console.log('Received email:', email);
+    //console.log('Type of email:', typeof email);
 
     // Extract email from nested object if needed
     if (email && typeof email === 'object' && email.email) {
-        console.log('Extracting email from nested object...');
+        //console.log('Extracting email from nested object...');
         email = email.email;
     }
 
@@ -218,7 +218,7 @@ const generateResetCode = asyncHandler(async (req, res) => {
             expiryTime: '10 minutes'
         });
 
-        console.log(`Reset code sent to ${email}: ${resetCode}`);
+        //console.log(`Reset code sent to ${email}: ${resetCode}`);
 
         return res.json(
             new ApiSuccess("Password reset code has been sent to your email")

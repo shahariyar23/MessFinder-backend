@@ -22,7 +22,7 @@ export const sendBookingConfirmation = async (userEmail, bookingData) => {
     };
 
     const result = await transporter.sendMail(mailOptions);
-    console.log('Booking confirmation email sent:', result.messageId);
+    //console.log('Booking confirmation email sent:', result.messageId);
     return result;
   } catch (error) {
     console.error('Error sending booking confirmation email:', error);
@@ -40,7 +40,7 @@ export const sendOwnerNotification = async (ownerEmail, bookingData) => {
     };
 
     const result = await transporter.sendMail(mailOptions);
-    console.log('Owner notification email sent:', result.messageId);
+    //console.log('Owner notification email sent:', result.messageId);
     return result;
   } catch (error) {
     console.error('Error sending owner notification email:', error);
@@ -63,7 +63,7 @@ export const sendWelcomeEmail = async (userEmail, userName) => {
     };
 
     const result = await transporter.sendMail(mailOptions);
-    console.log('Welcome email sent:', result.messageId);
+    //console.log('Welcome email sent:', result.messageId);
     return result;
   } catch (error) {
     console.error('Error sending welcome email:', error);
@@ -102,13 +102,13 @@ export const sendPaymentSuccess = async (userEmail, paymentData) => {
     };
 
     const result = await transporter.sendMail(mailOptions);
-    console.log('Payment success email sent:', result.messageId);
+    //console.log('Payment success email sent:', result.messageId);
     
     // Clean up: Delete the temporary PDF file after sending
     setTimeout(() => {
       if (fs.existsSync(receiptPath)) {
         fs.unlinkSync(receiptPath);
-        console.log('Temporary PDF deleted:', receiptPath);
+        //console.log('Temporary PDF deleted:', receiptPath);
       }
     }, 5000);
     
@@ -136,7 +136,7 @@ export const sendPasswordResetCode = async (userEmail, userData) => {
     };
 
     const result = await transporter.sendMail(mailOptions);
-    console.log('Password reset code email sent:', result.messageId);
+    //console.log('Password reset code email sent:', result.messageId);
     return result;
   } catch (error) {
     console.error('Error sending password reset code email:', error);
@@ -155,7 +155,7 @@ export const sendPasswordResetSuccess = async (userEmail, userData) => {
     };
 
     const result = await transporter.sendMail(mailOptions);
-    console.log('Password reset success email sent:', result.messageId);
+    //console.log('Password reset success email sent:', result.messageId);
     return result;
   } catch (error) {
     console.error('Error sending password reset success email:', error);
@@ -178,7 +178,7 @@ export const sendStatusUpdateEmail = async (userEmail, requestData) => {
       };
 
       const result = await transporter.sendMail(mailOptions);
-      console.log('Status update email sent:', result.messageId);
+      //console.log('Status update email sent:', result.messageId);
       return result;
     } catch (error) {
       console.error('Error sending status update email:', error);
@@ -206,7 +206,7 @@ export const sendAccountDeactivatedNotification = async (userEmail, userData) =>
     };
 
     const result = await transporter.sendMail(mailOptions);
-    console.log('Account deactivated notification sent:', result.messageId);
+    //console.log('Account deactivated notification sent:', result.messageId);
     return result;
   } catch (error) {
     console.error('Error sending account deactivated notification:', error);
@@ -237,7 +237,7 @@ export const sendRequestStatusUpdateToOwner = async (ownerEmail, requestData) =>
     };
 
     const result = await transporter.sendMail(mailOptions);
-    console.log('Request status update email sent to owner:', result.messageId);
+    //console.log('Request status update email sent to owner:', result.messageId);
     return result;
   } catch (error) {
     console.error('Error sending request status update email to owner:', error);

@@ -16,10 +16,6 @@ const corsOptions = {
       /\.vercel\.app$/
     ].filter(Boolean);
     
-    console.log('CORS Origin Check:', {
-      incomingOrigin: origin,
-      allowedOrigins: allowedOrigins
-    });
     
     if (!origin) {
       return callback(null, true);
@@ -33,12 +29,12 @@ const corsOptions = {
     // Check regex patterns
     for (const pattern of allowedOrigins) {
       if (pattern instanceof RegExp && pattern.test(origin)) {
-        console.log('CORS: Regex match allowed -', origin);
+        //console.log('CORS: Regex match allowed -', origin);
         return callback(null, true);
       }
     }
     
-    console.log('CORS: Origin blocked -', origin);
+    //console.log('CORS: Origin blocked -', origin);
     callback(new Error('Not allowed by CORS'));
   },
   credentials: true,

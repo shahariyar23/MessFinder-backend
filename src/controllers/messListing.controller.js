@@ -9,8 +9,13 @@ import {
 } from "../utils/cloudinary.js";
 import mongoose from "mongoose";
 import Review from "../models/review.model.js";
+import User from "../models/user.model.js";
 
 const addMess = asyncHandler(async (req, res) => {
+    // Store reference to uploaded files for cleanup
+    const uploadedFiles = req.files || [];
+    let cloudinaryPublicIds = []; // To track uploaded cloudinary images for cleanup
+
     try {
         const {
             title,
@@ -25,12 +30,11 @@ const addMess = asyncHandler(async (req, res) => {
             genderPreference,
             contact,
         } = req.body;
-
-        console.log("=== ADD MESS DEBUG ===");
-        console.log("Request files:", req.files);
-        console.log("Request body:", req.body);
-        console.log("User:", req.user);
-
+        const user = await User.findById(req.user.id)
+        console.log(user, "user")
+        if(user.isActive !== true){
+            throw new ApiError(400, `${user.name} is suspended. Your are not adding any mess`)
+        }
         // Validation checks
         const errors = [];
 
@@ -47,51 +51,54 @@ const addMess = asyncHandler(async (req, res) => {
         if (!contact?.trim()) errors.push("Contact information is required");
 
         if (errors.length > 0) {
-            console.log("Validation errors:", errors);
+            //console.log("Validation errors:", errors);
             throw new ApiError(400, errors.join(", "));
         }
 
         // Check if user is owner
         if (req.user.role !== "owner") {
-            console.log("User is not owner, role:", req.user.role);
+            //console.log("User is not owner, role:", req.user.role);
             throw new ApiError(403, "Only owners can create mess listings");
         }
 
         // Validate images
         if (!req.files || req.files.length === 0) {
-            console.log("No files received");
+            //console.log("No files received");
             throw new ApiError(400, "At least one image is required");
         }
 
         if (req.files.length !== 3) {
-            console.log(`Expected 3 files, got ${req.files.length}`);
+            //console.log(`Expected 3 files, got ${req.files.length}`);
             throw new ApiError(400, "Exactly 3 images are required");
         }
 
         // Check if files are valid images
         const invalidFiles = req.files.filter(file => !file.mimetype.startsWith('image/'));
         if (invalidFiles.length > 0) {
-            console.log("Invalid files detected:", invalidFiles);
+            //console.log("Invalid files detected:", invalidFiles);
             throw new ApiError(400, "Only image files are allowed");
         }
 
-        console.log("Uploading images to Cloudinary...");
+        //console.log("Uploading images to Cloudinary...");
 
         // Upload each image to Cloudinary
         const imageUploadPromises = req.files.map((file) => {
-            console.log(`Uploading file: ${file.path}`);
+            //console.log(`Uploading file: ${file.path}`);
             return uploadToCloudinary(file.path);
         });
 
         const cloudinaryResults = await Promise.all(imageUploadPromises);
-        console.log("Cloudinary results:", cloudinaryResults);
+        //console.log("Cloudinary results:", cloudinaryResults);
 
         // Check for failed uploads
         const failedUploads = cloudinaryResults.filter((result) => !result || !result.secure_url);
         if (failedUploads.length > 0) {
-            console.log("Failed uploads:", failedUploads);
+            //console.log("Failed uploads:", failedUploads);
             throw new ApiError(500, "Some images failed to upload to Cloudinary");
         }
+
+        // Extract public_ids for cleanup
+        cloudinaryPublicIds = cloudinaryResults.map(result => result.public_id);
 
         // Create array of objects with url and public_id
         const images = cloudinaryResults.map((result) => ({
@@ -99,7 +106,7 @@ const addMess = asyncHandler(async (req, res) => {
             public_id: result.public_id,
         }));
 
-        console.log("Uploaded images:", images);
+        //console.log("Uploaded images:", images);
 
         // Parse facilities if it's a string
         let facilitiesArray = facilities;
@@ -107,7 +114,7 @@ const addMess = asyncHandler(async (req, res) => {
             try {
                 facilitiesArray = JSON.parse(facilities);
             } catch (parseError) {
-                console.log("Facilities parse error, using as array:", facilities);
+                //console.log("Facilities parse error, using as array:", facilities);
                 facilitiesArray = Array.isArray(facilities) ? facilities : [facilities];
             }
         }
@@ -123,7 +130,7 @@ const addMess = asyncHandler(async (req, res) => {
             try {
                 roomFeaturesArray = JSON.parse(roomFeatures);
             } catch (parseError) {
-                console.log("Room features parse error, using as array:", roomFeatures);
+                //console.log("Room features parse error, using as array:", roomFeatures);
                 roomFeaturesArray = Array.isArray(roomFeatures) ? roomFeatures : [roomFeatures];
             }
         }
@@ -133,7 +140,7 @@ const addMess = asyncHandler(async (req, res) => {
             roomFeaturesArray = [roomFeaturesArray];
         }
 
-        console.log("Creating new mess listing...");
+        //console.log("Creating new mess listing...");
 
         // Create new mess listing
         const newMess = new MessListing({
@@ -153,44 +160,60 @@ const addMess = asyncHandler(async (req, res) => {
             status: "free",
         });
 
-        console.log("Saving to database...");
+        //console.log("Saving to database...");
         await newMess.save();
-        console.log("Saved successfully, ID:", newMess._id);
+        //console.log("Saved successfully, ID:", newMess._id);
 
         // Populate owner info
         await newMess.populate("owner_id", "name email phone");
-        console.log("Populated owner info");
+        //console.log("Populated owner info");
 
-        // Clean up uploaded files from server
+        // Clean up uploaded files from server after successful operation
         req.files.forEach(file => {
             if (fs.existsSync(file.path)) {
                 fs.unlinkSync(file.path);
-                console.log("Cleaned up file:", file.path);
+                //console.log("Cleaned up file:", file.path);
             }
         });
 
-        console.log("Sending success response...");
+        //console.log("Sending success response...");
         return res.status(201).json(
             new ApiSuccess("Mess listing created successfully", newMess, 201)
         );
 
     } catch (error) {
-        console.error("❌ ERROR in addMess controller:", error);
-        console.error("Error message:", error.message);
-        console.error("Error stack:", error.stack);
-        
-        // Clean up files if error occurred
-        if (req.files) {
-            const fs = require('fs');
-            req.files.forEach(file => {
+        // Cleanup procedure on error
+        try {
+            // Clean up uploaded files from server
+            uploadedFiles.forEach(file => {
                 if (fs.existsSync(file.path)) {
                     fs.unlinkSync(file.path);
-                    console.log("Cleaned up file after error:", file.path);
+                    console.log("Cleaned up file on error:", file.path);
                 }
             });
+
+            // Clean up Cloudinary images if any were uploaded
+            if (cloudinaryPublicIds.length > 0) {
+                console.log("Cleaning up Cloudinary images on error:", cloudinaryPublicIds);
+                const deletePromises = cloudinaryPublicIds.map(publicId => {
+                    return new Promise((resolve) => {
+                        cloudinary.uploader.destroy(publicId, (error, result) => {
+                            if (error) {
+                                console.error(`Failed to delete Cloudinary image ${publicId}:`, error);
+                            } else {
+                                console.log(`✅ Cleaned up Cloudinary image: ${publicId}`);
+                            }
+                            resolve();
+                        });
+                    });
+                });
+                await Promise.all(deletePromises);
+            }
+        } catch (cleanupError) {
+            console.error("Error during cleanup:", cleanupError);
         }
-        
-        // Make sure to throw the error so asyncHandler can handle it
+
+        // Re-throw the original error to maintain existing response behavior
         throw error;
     }
 });
@@ -210,7 +233,7 @@ const updateMess = asyncHandler(async (req, res) => {
         genderPreference,
         contact,
     } = req.body?.updateData;
-    console.log(req.body);
+    //console.log(req.body);
 
     // Check if mess exists
     const existingMess = await MessListing.findById(messId);
@@ -300,8 +323,7 @@ const updateMess = asyncHandler(async (req, res) => {
 });
 
 const deleteMess = asyncHandler(async (req, res) => {
-    const { messId } = req.params;
-
+    const { messId, adminId } = req.params;
     // Find the mess first to check ownership
     const mess = await MessListing.findById(messId);
 
@@ -340,7 +362,7 @@ const getAllMess = asyncHandler(async (req, res) => {
     // Always set status to "free"
     const queryStatus = "free";
 
-    console.log('🔍 Filtering messes with status:', queryStatus);
+    //console.log('🔍 Filtering messes with status:', queryStatus);
 
     // STEP 1: First find all messes with status "free" using find()
     const baseQuery = {
@@ -358,11 +380,11 @@ const getAllMess = asyncHandler(async (req, res) => {
         .populate('owner_id', 'name email phone isActive') // Populate owner info
         .lean();
 
-    console.log(`✅ Found ${freeMesses.length} messes with status: ${queryStatus}`);
+    //console.log(`✅ Found ${freeMesses.length} messes with status: ${queryStatus}`);
 
     // Debug: Check status of returned messes
     freeMesses.forEach((mess, index) => {
-        console.log(`📦 Mess ${index + 1}: ID=${mess._id}, Status=${mess.status}, Title=${mess.title}`);
+        //console.log(`📦 Mess ${index + 1}: ID=${mess._id}, Status=${mess.status}, Title=${mess.title}`);
     });
 
     // STEP 3: Filter out messes where owner is not active
@@ -370,7 +392,7 @@ const getAllMess = asyncHandler(async (req, res) => {
         mess.owner_id && mess.owner_id.isActive === true
     );
 
-    console.log(`👤 After owner filter: ${activeOwnerMesses.length} messes`);
+    //console.log(`👤 After owner filter: ${activeOwnerMesses.length} messes`);
 
     // STEP 4: Get rating information for the filtered messes
     let enhancedMess = [];

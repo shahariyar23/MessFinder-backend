@@ -48,29 +48,29 @@ const messListing = new mongoose.Schema(
             {
                 type: String,
                 enum: ["Wi-Fi", "Meals", "Laundry", "Lifts", "Water Filter", "Freezer"],
-                require: true
+                required: false
             },
         ],
         roomType:{
             type: String,
             enum:["Single", "Shared", "Double"],
-            require: true
+            required: true
         },
         roomFeatures: [
             {
                 type: String,
                 enum: ["Master Bed", "Attached Bath", "Balcony", "Furnished", "AC", "Geyser"],
-                required: true
+                required: false
             }
         ],
         genderPreference:{
             type: String,
             enum: ["Male", "Female"],
-            require: true
+            required: true
         },
         contact:{
             type: String,
-            require: true
+            required: true
         },
         image: [{
             url: {
