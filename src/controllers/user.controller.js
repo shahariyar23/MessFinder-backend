@@ -154,11 +154,11 @@ const login = asyncHandler(async (req, res) => {
     
     const cookieOptions = {
         httpOnly: true,
-        secure: isProduction, // true in production, false in development
-        sameSite: isProduction ? 'None' : 'Lax', // None for cross-site in production, Lax for development
-        maxAge: 24 * 60 * 60 * 1000, // 1 day
+        secure: isProduction, 
+        sameSite: isProduction ? 'None' : 'Lax',
+        maxAge: 24 * 60 * 60 * 1000, 
         path: '/',
-        domain: isProduction ? frontendDomain : undefined, // Set domain only in production
+        domain: isProduction ? frontendDomain : undefined, 
     };
 
     // Debug logging (remove in production)
@@ -200,10 +200,10 @@ const logout = asyncHandler(async (req, res) => {
         // Define cookie options for production
         const cookieOptions = {
             httpOnly: true,
-            secure: isProduction, // true in production, false in development
-            sameSite: isProduction ? 'None' : 'Lax', // None for cross-site in production, Lax for development
+            secure: isProduction, 
+            sameSite: isProduction ? 'None' : 'Lax', 
             path: '/',
-            domain: isProduction ? frontendDomain : undefined, // Set domain in production
+            domain: isProduction ? frontendDomain : undefined,
         };
 
         // Clear the cookie
