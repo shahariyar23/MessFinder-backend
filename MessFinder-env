@@ -1,0 +1,14 @@
+PORT=8000
+MONGO_URL=mongodb+srv://mostakshahariyar18_db_user:MessFinderMostakMongodb@messfindercluster.keygqrz.mongodb.net/?retryWrites=true&w=majority&appName=MessFinderCluster
+JWT_SECRET=EEOxPPLNfPi225xkeJUWSSXOnAQZ8zXi26Zfb8YVVlVamGMrlAYLO8hxwRWwCcWTSYiN1DDat3w5Ss0VUQzU5i1o1qx5QrzpbJ9j
+JWT_EXPIRE=1d
+CLOUD_NAME=mostakshahariyar
+API_KEY=548443337817757
+API_SECRET=HSIW6TuOs2Ci3yIjt7jsBdNmDp8
+SSL_APP_PASSWORD=fitne67449ff168ffd@ssl
+SSL_APP_STORE_ID=fitne67449ff168ffd
+SSL_IS_LIVE=false
+FRONTEND_URL=https://mess-finder-frontend.vercel.app/
+BACKEND_URL=https://mess-finder-backend.vercel.app/
+EMAIL_USER=shahariyar2307@gmail.com
+EMAIL_PASS=bqpq bhyw qkje elka
