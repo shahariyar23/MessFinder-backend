@@ -1,0 +1,17 @@
+services:
+  js-app:
+    build:
+      context: .
+    container_name: js-app
+    restart: unless-stopped
+    init: true
+    env_file: ./.env  # Load environment variables
+    ports:
+      - "8000:8000"  # Map host port 8000 to container port 8000
+    networks:
+      - app-net
+    # If your app requires a database or other services, add them below and set depends_on
+
+networks:
+  app-net:
+    driver: bridge
