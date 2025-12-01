@@ -68,7 +68,11 @@ const login = asyncHandler(async (req, res) => {
     // Find user by email
     const user = await User.findOne({ email });
     if (!user) {
+<<<<<<< HEAD
         throw new ApiError(400, "Invalid email or password");
+=======
+        throw new ApiError(400, "Invalid email or password"); // Don't specify which one for security
+>>>>>>> 2e1a9b23a74903cebefa5ef9033a14ed279fa2f5
     }
 
     // Check if account is deactivated FIRST
@@ -95,6 +99,7 @@ const login = asyncHandler(async (req, res) => {
         // Increment failed attempts
         user.loginAttempts += 1;
 
+<<<<<<< HEAD
         // Lock account after 2 failed attempts
         if (user.loginAttempts >= 2) {
             user.lockUntil = Date.now() + 2 * 60 * 1000; // 2 minutes lock
@@ -104,18 +109,42 @@ const login = asyncHandler(async (req, res) => {
         if (user.loginAttempts >= 3) {
             user.isActive = false;
             try {
+=======
+        // Lock account after 3 failed attempts
+        if (user.loginAttempts >= 3) {
+            user.lockUntil = Date.now() + 2 * 60 * 1000; // 2 minutes lock
+        }
+
+        // Deactivate account after 5 failed attempts
+        if (user.loginAttempts >= 5) {
+            user.isActive = false;
+              try {
+>>>>>>> 2e1a9b23a74903cebefa5ef9033a14ed279fa2f5
                 await sendAccountDeactivatedNotification(user.email, {
                     name: user.name || 'User',
                     deactivationReason: 'Multiple consecutive failed login attempts',
                     loginAttempts: user.loginAttempts,
                     contactEmail: 'support@messfinder.com'
                 });
+<<<<<<< HEAD
             } catch (emailError) {
                 console.error('Failed to send account deactivated email:', emailError);
             }
         }
 
         await user.save();
+=======
+                //console.log(`🚫 Account deactivated email sent to: ${user.email}`);
+            } catch (emailError) {
+                console.error('❌ Failed to send account deactivated email:', emailError);
+                // Don't throw error, just log it
+            }
+          
+        }
+
+        await user.save();
+
+>>>>>>> 2e1a9b23a74903cebefa5ef9033a14ed279fa2f5
         throw new ApiError(400, "Invalid email or password");
     }
 
@@ -123,6 +152,7 @@ const login = asyncHandler(async (req, res) => {
     user.loginAttempts = 0;
     user.lockUntil = null;
     user.lastLogin = new Date();
+<<<<<<< HEAD
     
     const newUser = {
         id: user._id,
@@ -131,6 +161,14 @@ const login = asyncHandler(async (req, res) => {
         role: user.role
     };
 
+=======
+    const newUser = {
+            id: user._id,
+            email: user.email,
+            name: user.name,
+            role: user.role
+    }
+>>>>>>> 2e1a9b23a74903cebefa5ef9033a14ed279fa2f5
     // Generate JWT token
     const token = jwt.sign(
         newUser,
@@ -146,6 +184,7 @@ const login = asyncHandler(async (req, res) => {
         name: user.name,
         phone: user.phone,
         role: user.role
+<<<<<<< HEAD
     };
 
     // Define cookie options for production/development
@@ -164,12 +203,23 @@ const login = asyncHandler(async (req, res) => {
     // Debug logging (remove in production)
     if (!isProduction) {
         console.log('Login cookie options:', cookieOptions);
+=======
+>>>>>>> 2e1a9b23a74903cebefa5ef9033a14ed279fa2f5
     }
 
     // Return response
     return res
         .status(200)
+<<<<<<< HEAD
         .cookie("token", token, cookieOptions)
+=======
+        .cookie("token", token, {
+            httpOnly: true,
+            secure: true,
+            sameSite: "None",
+            maxAge: 24 * 60 * 60 * 1000,
+        })
+>>>>>>> 2e1a9b23a74903cebefa5ef9033a14ed279fa2f5
         .json(
             new ApiSuccess(
                 "Login successful",
@@ -182,6 +232,7 @@ const login = asyncHandler(async (req, res) => {
         );
 });
 
+<<<<<<< HEAD
 const logout = asyncHandler(async (req, res) => {
     try {
         // Clear the token from database
@@ -243,6 +294,10 @@ const logout = asyncHandler(async (req, res) => {
             new ApiSuccess("Logged out successfully", null, 200)
         );
     }
+=======
+const logout = asyncHandler((req, res) => {
+    res.clearCookie("token").json(new ApiSuccess("logout successful", 200));
+>>>>>>> 2e1a9b23a74903cebefa5ef9033a14ed279fa2f5
 });
 
 const generateResetCode = asyncHandler(async (req, res) => {
