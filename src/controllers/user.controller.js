@@ -155,10 +155,18 @@ const login = asyncHandler(async (req, res) => {
 
     const cookieOptions = {
         httpOnly: true,
+<<<<<<< HEAD
         secure: true,
         sameSite: "None",
         maxAge: 24 * 60 * 60 * 1000,
         path: "/",
+=======
+        secure: isProduction, 
+        sameSite: isProduction ? 'None' : 'Lax',
+        maxAge: 24 * 60 * 60 * 1000, 
+        path: '/',
+        domain: isProduction ? frontendDomain : undefined, 
+>>>>>>> e52db30 (change the login and logout controller for live server)
     };
 
     // Return response with cookie
@@ -190,7 +198,18 @@ const logout = asyncHandler(async (req, res) => {
         path: "/",
     };
 
+<<<<<<< HEAD
     res.clearCookie("token", cookieOptions);
+=======
+        // Define cookie options for production
+        const cookieOptions = {
+            httpOnly: true,
+            secure: isProduction, 
+            sameSite: isProduction ? 'None' : 'Lax', 
+            path: '/',
+            domain: isProduction ? frontendDomain : undefined,
+        };
+>>>>>>> e52db30 (change the login and logout controller for live server)
 
     return res.json(new ApiSuccess("Logged out successfully"));
 });
