@@ -60,22 +60,18 @@ const register = asyncHandler(async (req, res) => {
 const login = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
-    // Input validation
+    // Validate input
     if (!email || !password) {
         throw new ApiError(400, "Email and password are required");
     }
 
-    // Find user by email
+    // Find user
     const user = await User.findOne({ email });
     if (!user) {
-
         throw new ApiError(400, "Invalid email or password");
-
-        throw new ApiError(400, "Invalid email or password"); // Don't specify which one for security
-
     }
 
-    // Check if account is deactivated FIRST
+    // Check if account is deactivated
     if (!user.isActive) {
         throw new ApiError(
             403,
@@ -85,88 +81,64 @@ const login = asyncHandler(async (req, res) => {
 
     // Check if account is temporarily locked
     if (user.lockUntil && user.lockUntil > Date.now()) {
-        const minutes = Math.ceil((user.lockUntil - Date.now()) / (60 * 1000));
+        const minutes = Math.ceil((user.lockUntil - Date.now()) / 60000);
         throw new ApiError(
             403,
-            `Account temporarily locked due to multiple failed login attempts. Please try again in ${minutes} minute(s).`
+            `Account temporarily locked due to multiple failed login attempts. Try again in ${minutes} minute(s).`
         );
     }
 
-    // Password verification
+    // Validate password
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
-        // Increment failed attempts
         user.loginAttempts += 1;
 
-
-        // Lock account after 2 failed attempts
+        // Lock after 2 failed attempts
         if (user.loginAttempts >= 2) {
-            user.lockUntil = Date.now() + 2 * 60 * 1000; // 2 minutes lock
+            user.lockUntil = Date.now() + 2 * 60 * 1000; // 2 minutes
         }
 
-        // Deactivate account after 3 failed attempts
+        // Lock again after 3 failed
         if (user.loginAttempts >= 3) {
-            user.isActive = false;
-            try {
-
-        // Lock account after 3 failed attempts
-        if (user.loginAttempts >= 3) {
-            user.lockUntil = Date.now() + 2 * 60 * 1000; // 2 minutes lock
+            user.lockUntil = Date.now() + 2 * 60 * 1000;
         }
 
-        // Deactivate account after 5 failed attempts
+        // Deactivate after 5 failed attempts
         if (user.loginAttempts >= 5) {
             user.isActive = false;
-              try {
 
+            try {
                 await sendAccountDeactivatedNotification(user.email, {
-                    name: user.name || 'User',
-                    deactivationReason: 'Multiple consecutive failed login attempts',
+                    name: user.name || "User",
+                    deactivationReason: "Multiple consecutive failed login attempts",
                     loginAttempts: user.loginAttempts,
-                    contactEmail: 'support@messfinder.com'
+                    contactEmail: "support@messfinder.com",
                 });
-
             } catch (emailError) {
-                console.error('Failed to send account deactivated email:', emailError);
+                console.error("Failed to send account deactivated email:", emailError);
             }
         }
 
         await user.save();
-
-                //console.log(`🚫 Account deactivated email sent to: ${user.email}`);
-            } catch (emailError) {
-                console.error('❌ Failed to send account deactivated email:', emailError);
-                // Don't throw error, just log it
-            }
-          
-        }
-
-        await user.save();
-
-
         throw new ApiError(400, "Invalid email or password");
     }
 
-    // SUCCESSFUL LOGIN: Reset attempts and lock
+    // Successful login
     user.loginAttempts = 0;
     user.lockUntil = null;
     user.lastLogin = new Date();
 
-    
-    const newUser = {
+    const payload = {
         id: user._id,
         email: user.email,
         name: user.name,
-        role: user.role
+        role: user.role,
     };
 
-    // Generate JWT token
-    const token = jwt.sign(
-        newUser,
-        process.env.JWT_SECRET,
-        { expiresIn: process.env.JWT_EXPIRE }
-    );
+    const token = jwt.sign(payload, process.env.JWT_SECRET, {
+        expiresIn: process.env.JWT_EXPIRE,
+    });
 
     user.accessToken = token;
     await user.save();
@@ -175,43 +147,24 @@ const login = asyncHandler(async (req, res) => {
         id: user._id,
         name: user.name,
         phone: user.phone,
-        role: user.role
-
+        role: user.role,
     };
 
-    // Define cookie options for production/development
+    // Cookie settings
     const isProduction = true;
-    const frontendDomain = process.env.FRONTEND_URL || 'localhost:8173';
-    
+
     const cookieOptions = {
         httpOnly: true,
-        secure: isProduction, 
-        sameSite: isProduction ? 'None' : 'Lax',
-        maxAge: 24 * 60 * 60 * 1000, 
-        path: '/',
-        domain: isProduction ? frontendDomain : undefined, 
+        secure: true,
+        sameSite: "None",
+        maxAge: 24 * 60 * 60 * 1000,
+        path: "/",
     };
 
-    // Debug logging (remove in production)
-    if (!isProduction) {
-        console.log('Login cookie options:', cookieOptions);
-
-
-    }
-
-    // Return response
+    // Return response with cookie
     return res
         .status(200)
-
         .cookie("token", token, cookieOptions)
-
-        .cookie("token", token, {
-            httpOnly: true,
-            secure: true,
-            sameSite: "None",
-            maxAge: 24 * 60 * 60 * 1000,
-        })
-
         .json(
             new ApiSuccess(
                 "Login successful",
@@ -226,67 +179,22 @@ const login = asyncHandler(async (req, res) => {
 
 
 const logout = asyncHandler(async (req, res) => {
-    try {
-        // Clear the token from database
-        if (req.user?.id) {
-            await User.findByIdAndUpdate(
-                req.user.id,
-                { $unset: { accessToken: "" } },
-                { new: true }
-            );
-        }
+    await User.findByIdAndUpdate(req.user?.id, {
+        $unset: { accessToken: "" }
+    });
 
-        // Get environment
-        const isProduction = true
-        const frontendDomain = process.env.FRONTEND_URL || 'localhost:5173';
+    const cookieOptions = {
+        httpOnly: true,
+        secure: true,
+        sameSite: "None",
+        path: "/",
+    };
 
-        // Define cookie options for production
-        const cookieOptions = {
-            httpOnly: true,
-            secure: isProduction, 
-            sameSite: isProduction ? 'None' : 'Lax', 
-            path: '/',
-            domain: isProduction ? frontendDomain : undefined,
-        };
+    res.clearCookie("token", cookieOptions);
 
-        // Clear the cookie
-        res.clearCookie('token', cookieOptions);
+    return res.json(new ApiSuccess("Logged out successfully"));
+});
 
-        // Also clear any other auth-related cookies
-        res.clearCookie('refreshToken', cookieOptions);
-        res.clearCookie('session', cookieOptions);
-
-        // Log the action
-        console.log(`User logged out: ${req.user?.id || 'Unknown'}`, {
-            environment: process.env.NODE_ENV,
-            domain: isProduction ? frontendDomain : 'localhost',
-            timestamp: new Date().toISOString()
-        });
-        
-        return res.status(200).json(
-            new ApiSuccess("Logged out successfully", null, 200)
-        );
-        
-    } catch (error) {
-        console.error('Logout error:', error);
-        
-        // Even on error, try to clear cookies
-        const isProduction = process.env.NODE_ENV === 'production';
-        const frontendDomain = process.env.FRONTEND_DOMAIN || 'localhost';
-        
-        res.clearCookie('token', {
-            httpOnly: true,
-            secure: isProduction,
-            sameSite: isProduction ? 'None' : 'Lax',
-            path: '/',
-            domain: isProduction ? frontendDomain : undefined,
-        });
-        
-        return res.status(200).json(
-            new ApiSuccess("Logged out successfully", null, 200)
-        );
-    }
-})
 
 const generateResetCode = asyncHandler(async (req, res) => {
     let { email } = req.body;
