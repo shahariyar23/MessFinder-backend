@@ -171,7 +171,7 @@ const deleteOwner = asyncHandler(async (req, res) => {
     }
 });
 
-// Modify owner (Admin only - specialized for owners)
+// Modify owner (Admin only specialized for owners)
 const modifyOwner = asyncHandler(async (req, res) => {
     if (req.user.role !== "admin") {
         throw new ApiError(403, "Access denied. Only admin can modify owners.");
