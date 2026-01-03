@@ -9,6 +9,7 @@ import {
     logout,
     register,
     resetPassword,
+    verifyLoginOtp,
     verifyResetCode
 } from "../controllers/user.controller.js";
 import ApiSuccess from "../utils/ApiSuccess.js";
@@ -21,6 +22,7 @@ userRouter.get("/check-auth", authMiddleware, (req, res) => {
 
 userRouter.route("/register").post(register);
 userRouter.route("/login").post(login);
+userRouter.route("/verify-login").post(verifyLoginOtp);
 userRouter.route("/logout").post(logout);
 userRouter.route("/forgot-password").post(generateResetCode);
 userRouter.route("/verify-code").post(verifyResetCode);

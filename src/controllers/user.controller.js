@@ -6,16 +6,12 @@ import ApiError from "../utils/ApiError.js";
 import ApiSuccess from "../utils/ApiSuccess.js";
 import {
     sendAccountDeactivatedNotification,
+    sendLoginOtpEmail,
     sendPasswordResetCode,
     sendPasswordResetSuccess,
-    sendWelcomeEmail
+    sendWelcomeEmail,
 } from "../utils/service/emailService.js";
 import { getAccountLockedTemplate } from "../utils/emailTemplates.js";
-
-
-
-
-
 
 const register = asyncHandler(async (req, res) => {
     const { name, email, password, phone, role } = req.body;
@@ -44,7 +40,7 @@ const register = asyncHandler(async (req, res) => {
     });
     await newUser.save();
 
-    await sendWelcomeEmail(newUser.email, newUser.name)
+    await sendWelcomeEmail(newUser.email, newUser.name);
 
     // Remove password from response
     const userResponse = { ...newUser.toObject() };
@@ -60,75 +56,120 @@ const register = asyncHandler(async (req, res) => {
 const login = asyncHandler(async (req, res) => {
     const { email, password } = req.body;
 
-    // Validate input
+    //  Validate input
     if (!email || !password) {
         throw new ApiError(400, "Email and password are required");
     }
 
-    // Find user
+    //  Find user
     const user = await User.findOne({ email });
     if (!user) {
         throw new ApiError(400, "Invalid email or password");
     }
 
-    // Check if account is deactivated
+    //  Account status checks
     if (!user.isActive) {
         throw new ApiError(
             403,
-            "Your account is deactivated due to multiple failed login attempts. Please contact support."
+            "Your account is deactivated. Please contact support."
         );
     }
 
-    // Check if account is temporarily locked
     if (user.lockUntil && user.lockUntil > Date.now()) {
         const minutes = Math.ceil((user.lockUntil - Date.now()) / 60000);
         throw new ApiError(
             403,
-            `Account temporarily locked due to multiple failed login attempts. Try again in ${minutes} minute(s).`
+            `Account locked. Try again in ${minutes} minute(s).`
         );
     }
 
-    // Validate password
+    //  Password validation
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
         user.loginAttempts += 1;
 
-        // Lock after 2 failed attempts
         if (user.loginAttempts >= 2) {
-            user.lockUntil = Date.now() + 2 * 60 * 1000; // 2 minutes
-        }
-
-        // Lock again after 3 failed
-        if (user.loginAttempts >= 3) {
             user.lockUntil = Date.now() + 2 * 60 * 1000;
         }
 
-        // Deactivate after 5 failed attempts
         if (user.loginAttempts >= 5) {
             user.isActive = false;
-
-            try {
-                await sendAccountDeactivatedNotification(user.email, {
-                    name: user.name || "User",
-                    deactivationReason: "Multiple consecutive failed login attempts",
-                    loginAttempts: user.loginAttempts,
-                    contactEmail: "support@messfinder.com",
-                });
-            } catch (emailError) {
-                console.error("Failed to send account deactivated email:", emailError);
-            }
+            await sendAccountDeactivatedNotification(user.email, {
+                name: user.name || "User",
+                deactivationReason: "Multiple failed login attempts",
+                loginAttempts: user.loginAttempts,
+                contactEmail: "support@messfinder.com",
+            });
         }
 
         await user.save();
         throw new ApiError(400, "Invalid email or password");
     }
 
-    // Successful login
+    // ✅  Password is correct → reset counters
     user.loginAttempts = 0;
     user.lockUntil = null;
     user.lastLogin = new Date();
 
+    //  Generate OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+    user.loginOtp = otp;
+    user.loginOtpExpires = Date.now() + 10 * 60 * 1000; // ⏳ 10 minutes
+    user.loginOtpAttempts = 0;
+
+    await user.save();
+
+    // 7 Send OTP email
+    try {
+        await sendLoginOtpEmail(user.email, {
+            name: user.name || "User",
+            otp,
+            expiresIn: "10 minutes",
+        });
+    } catch (err) {
+        console.error("OTP email error:", err);
+        throw new ApiError(500, "Failed to send OTP email");
+    }
+
+    // Respond → OTP required
+    return res.status(200).json(
+        new ApiSuccess(
+            "OTP sent to your email",
+            {
+                otpRequired: true,
+                email: user.email,
+            },
+            200
+        )
+    );
+});
+
+const verifyLoginOtp = asyncHandler(async (req, res) => {
+    const { email, otp } = req.body;
+
+    const user = await User.findOne({ email });
+    if (!user || !user.loginOtp) {
+        throw new ApiError(400, "Invalid request");
+    }
+
+    if (user.loginOtpExpires < Date.now()) {
+        throw new ApiError(400, "OTP expired");
+    }
+
+    if (user.loginOtp !== otp) {
+        user.loginOtpAttempts += 1;
+        await user.save();
+        throw new ApiError(400, "Invalid OTP");
+    }
+
+    // ✅ OTP verified → clear OTP fields
+    user.loginOtp = undefined;
+    user.loginOtpExpires = undefined;
+    user.loginOtpAttempts = 0;
+
+    // ✅ Generate JWT
     const payload = {
         id: user._id,
         email: user.email,
@@ -143,33 +184,14 @@ const login = asyncHandler(async (req, res) => {
     user.accessToken = token;
     await user.save();
 
-    const returnUser = {
-        id: user._id,
-        name: user.name,
-        phone: user.phone,
-        role: user.role,
-    };
-
-    // Cookie settings
-    const isProduction = true;
-
+    // 🍪 Cookie
     const cookieOptions = {
         httpOnly: true,
-<<<<<<< HEAD
         secure: true,
         sameSite: "None",
         maxAge: 24 * 60 * 60 * 1000,
-        path: "/",
-=======
-        secure: isProduction, 
-        sameSite: isProduction ? 'None' : 'Lax',
-        maxAge: 24 * 60 * 60 * 1000, 
-        path: '/',
-        domain: isProduction ? frontendDomain : undefined, 
->>>>>>> e52db30 (change the login and logout controller for live server)
     };
 
-    // Return response with cookie
     return res
         .status(200)
         .cookie("token", token, cookieOptions)
@@ -177,41 +199,37 @@ const login = asyncHandler(async (req, res) => {
             new ApiSuccess(
                 "Login successful",
                 {
-                    token,
-                    user: returnUser,
+                    user: {
+                        id: user._id,
+                        name: user.name,
+                        phone: user.phone,
+                        role: user.role,
+                    },
                 },
                 200
             )
         );
 });
 
-
 const logout = asyncHandler(async (req, res) => {
-    await User.findByIdAndUpdate(req.user?.id, {
-        $unset: { accessToken: "" }
+  // Remove token from DB (optional but good)
+  if (req.user?.id) {
+    await User.findByIdAndUpdate(req.user.id, {
+      $unset: { accessToken: "" },
     });
+  }
 
-    const cookieOptions = {
-        httpOnly: true,
-        secure: true,
-        sameSite: "None",
-        path: "/",
-    };
+  // ❗ MUST MATCH LOGIN COOKIE OPTIONS
+  res.clearCookie("token", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "None",
+    path: "/", // VERY IMPORTANT
+  });
 
-<<<<<<< HEAD
-    res.clearCookie("token", cookieOptions);
-=======
-        // Define cookie options for production
-        const cookieOptions = {
-            httpOnly: true,
-            secure: isProduction, 
-            sameSite: isProduction ? 'None' : 'Lax', 
-            path: '/',
-            domain: isProduction ? frontendDomain : undefined,
-        };
->>>>>>> e52db30 (change the login and logout controller for live server)
-
-    return res.json(new ApiSuccess("Logged out successfully"));
+  return res.status(200).json(
+    new ApiSuccess("Logged out successfully", null, 200)
+  );
 });
 
 
@@ -222,13 +240,13 @@ const generateResetCode = asyncHandler(async (req, res) => {
     //console.log('Type of email:', typeof email);
 
     // Extract email from nested object if needed
-    if (email && typeof email === 'object' && email.email) {
+    if (email && typeof email === "object" && email.email) {
         //console.log('Extracting email from nested object...');
         email = email.email;
     }
 
     // Final validation
-    if (!email || typeof email !== 'string') {
+    if (!email || typeof email !== "string") {
         throw new ApiError(400, "Valid email address is required");
     }
 
@@ -253,9 +271,9 @@ const generateResetCode = asyncHandler(async (req, res) => {
 
     try {
         await sendPasswordResetCode(email, {
-            name: user.name || user.username || 'User',
+            name: user.name || user.username || "User",
             verificationCode: resetCode,
-            expiryTime: '10 minutes'
+            expiryTime: "10 minutes",
         });
 
         //console.log(`Reset code sent to ${email}: ${resetCode}`);
@@ -263,10 +281,9 @@ const generateResetCode = asyncHandler(async (req, res) => {
         return res.json(
             new ApiSuccess("Password reset code has been sent to your email")
         );
-
     } catch (emailError) {
-        console.error('Failed to send reset code email:', emailError);
-        
+        console.error("Failed to send reset code email:", emailError);
+
         // Clear the reset code if email fails
         user.resetPasswordCode = undefined;
         user.resetPasswordExpires = undefined;
@@ -309,23 +326,26 @@ const resetPassword = asyncHandler(async (req, res) => {
     const { email, code, newPassword } = req.body;
 
     if (!email || !code || !newPassword) {
-        throw new ApiError(400, "Email, reset code and new password are required");
+        throw new ApiError(
+            400,
+            "Email, reset code and new password are required"
+        );
     }
 
     if (newPassword.length < 6) {
         throw new ApiError(400, "Password must be at least 6 characters long");
     }
-    
-    const user = await User.findOne({ 
+
+    const user = await User.findOne({
         email,
         resetPasswordCode: code,
-        resetPasswordExpires: { $gt: new Date() }
+        resetPasswordExpires: { $gt: new Date() },
     });
 
     if (!user) {
         throw new ApiError(400, "Invalid or expired reset code");
     }
-const hashedPassword = await bcrypt.hash(newPassword, 12);
+    const hashedPassword = await bcrypt.hash(newPassword, 12);
     // Update password
     user.password = hashedPassword;
     user.isActive = true;
@@ -337,16 +357,14 @@ const hashedPassword = await bcrypt.hash(newPassword, 12);
     // Send password reset success email
     try {
         await sendPasswordResetSuccess(email, {
-            name: user.name || user.username || 'User'
+            name: user.name || user.username || "User",
         });
     } catch (emailError) {
-        console.error('Failed to send reset success email:', emailError);
+        console.error("Failed to send reset success email:", emailError);
         // Don't throw error, just log it
     }
 
-    return res.json(
-        new ApiSuccess("Password reset successfully")
-    );
+    return res.json(new ApiSuccess("Password reset successfully"));
 });
 
 const getAllStudents = asyncHandler(async (req, res) => {
@@ -411,36 +429,38 @@ const getAllOwners = asyncHandler(async (req, res) => {
     );
 });
 
-const getStudentById = asyncHandler(async (req, res)=>{
-    const {id} = req.params;
-    if(!id){
-        throw new ApiError(403, "user id is require ")
+const getStudentById = asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    if (!id) {
+        throw new ApiError(403, "user id is require ");
     }
-    if(id !== req.user.id){
-        throw new ApiError(403, "only user can view his/ her own profile")
+    if (id !== req.user.id) {
+        throw new ApiError(403, "only user can view his/ her own profile");
     }
     const user = await User.findById(id);
-    if(!user){
-        throw new ApiError(403, "user is not found")
+    
+    if (!user) {
+        throw new ApiError(403, "user is not found");
     }
     const newUser = {
         name: user.name,
         role: user.role,
         phone: user.phone,
-        email: user.email
-    }
-    return res.status(200).json(new ApiSuccess("user found", newUser) )
-})
-
+        email: user.email,
+    };
+    
+    return res.status(200).json(new ApiSuccess("user found", newUser));
+});
 
 export {
     register,
     login,
+    verifyLoginOtp,
     logout,
     generateResetCode,
     verifyResetCode,
     resetPassword,
     getAllOwners,
     getAllStudents,
-    getStudentById
+    getStudentById,
 };

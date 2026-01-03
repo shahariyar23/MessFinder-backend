@@ -31,7 +31,6 @@ const addMess = asyncHandler(async (req, res) => {
             contact,
         } = req.body;
         const user = await User.findById(req.user.id)
-        console.log(user, "user")
         if(user.isActive !== true){
             throw new ApiError(400, `${user.name} is suspended. Your are not adding any mess`)
         }
@@ -362,7 +361,7 @@ const getAllMess = asyncHandler(async (req, res) => {
     // Always set status to "free"
     const queryStatus = "free";
 
-    //console.log('🔍 Filtering messes with status:', queryStatus);
+    console.log('🔍 Filtering messes with status:', req.query);
 
     // STEP 1: First find all messes with status "free" using find()
     const baseQuery = {
@@ -371,7 +370,7 @@ const getAllMess = asyncHandler(async (req, res) => {
 
     // Get total count of free messes
     const totalMess = await MessListing.countDocuments({status: "free"});
-
+    const totalMessForHome = await MessListing.countDocuments();
     // STEP 2: Find free messes with pagination
     const freeMesses = await MessListing.find({status: "free"})
         .sort({ createdAt: -1 })
@@ -476,6 +475,7 @@ const getAllMess = asyncHandler(async (req, res) => {
     return res.status(200).json(
         new ApiSuccess("Mess listing retrieved successfully", {
             messes: enhancedMess,
+            totalMessForHome,
             pagination: {
                 currentPage: page,
                 totalPages,

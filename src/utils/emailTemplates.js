@@ -1,57 +1,86 @@
 
 export const getBookingConfirmationTemplate = (bookingData) => {
   return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-        .header { background: linear-gradient(135deg, #22c55e, #10b981); color: white; padding: 20px; text-align: center; }
-        .content { padding: 20px; }
-        .booking-details { background: #f8fafc; padding: 15px; border-radius: 8px; margin: 15px 0; }
-        .footer { background: #64748b; color: white; padding: 15px; text-align: center; }
-        .button { background: #22c55e; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <h1>🎉 Booking Confirmation!</h1>
-        <p>MessFinder - Your perfect accommodation partner</p>
-      </div>
-      
-      <div class="content">
-        <h2>Hello ${bookingData.tenantName},</h2>
-        <p>Your booking Confirmation. Here are your booking details:</p>
-        
-        <div class="booking-details">
-          <h3>📋 Booking Information</h3>
-          <p><strong>Mess Name:</strong> ${bookingData.messName}</p>
-          <p><strong>Address:</strong> ${bookingData.address}</p>
-          <p><strong>Check-in Date:</strong> ${new Date(bookingData.checkInDate).toLocaleDateString()}</p>
-          <p><strong>Transaction ID:</strong> ${bookingData.transactionId}</p>
-          <p><strong>Amount:</strong> BDT ${bookingData.amount}</p>
-          <p><strong>Payment Status:</strong> BDT ${bookingData.PaymentStatus}</p>
-          <p><strong>Booking Status:</strong> BDT ${bookingData.bookingStatus}</p>
-        </div>
-        
-        <p><strong>Next Steps:</strong></p>
-        <ul>
-          <li>Contact the mess owner for check-in instructions</li>
-          <li>Keep your transaction ID for reference</li>
-          <li>Download your receipt from the app</li>
-        </ul>
-        
-        <a href="${bookingData.bookingLink}" class="button">View Booking Details</a>
-      </div>
-      
-      <div class="footer">
-        <p>Thank you for choosing MessFinder!</p>
-        <p>Need help? Contact us at support@messfinder.com</p>
-        <p>© 2025 MessFinder. All rights reserved.</p>
-      </div>
-    </body>
-    </html>
-  `;
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Booking Confirmation</title>
+</head>
+<body style="margin:0; padding:0; background:#f1f5f9; font-family: Arial, sans-serif;">
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding: 30px 0;">
+    <tr>
+      <td align="center">
+
+        <!-- Card -->
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.08);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#22c55e,#16a34a); padding:30px; text-align:center; color:#ffffff;">
+              <h1 style="margin:0; font-size:28px;">🎉 Booking Confirmed!</h1>
+              <p style="margin:8px 0 0; font-size:15px; opacity:0.9;">
+                MessFinder – Your accommodation partner
+              </p>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding:30px; color:#334155;">
+
+              <h2 style="margin-top:0;">Hello ${bookingData.tenantName},</h2>
+              <p>Your booking has been successfully confirmed. Below are the details:</p>
+
+              <!-- Details Box -->
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8fafc; border-radius:10px; padding:20px; margin:20px 0;">
+                <tr>
+                  <td>
+                    <p><strong>🏠 Mess Name:</strong> ${bookingData.messName}</p>
+                    <p><strong>📍 Address:</strong> ${bookingData.address}</p>
+                    <p><strong>📅 Check-in:</strong> ${new Date(bookingData.checkInDate).toLocaleDateString()}</p>
+                    <p><strong>💳 Transaction ID:</strong> ${bookingData.transactionId}</p>
+                    <p><strong>💰 Amount:</strong> BDT ${bookingData.amount}</p>
+                    <p><strong>📌 Payment Status:</strong> ${bookingData.PaymentStatus}</p>
+                    <p><strong>📌 Booking Status:</strong> ${bookingData.bookingStatus}</p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- CTA -->
+              <div style="text-align:center; margin:30px 0;">
+                <a href="${bookingData.bookingLink}"
+                   style="background:#22c55e; color:#ffffff; padding:14px 28px; text-decoration:none; border-radius:8px; font-weight:bold; display:inline-block;">
+                  View Booking Details
+                </a>
+              </div>
+
+              <p style="font-size:14px; color:#64748b;">
+                Please keep your transaction ID for future reference.
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#0f172a; color:#cbd5f5; padding:20px; text-align:center; font-size:13px;">
+              <p style="margin:5px 0;">Need help? support@messfinder.com</p>
+              <p style="margin:5px 0;">© 2025 MessFinder. All rights reserved.</p>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
+`;
 };
 
 export const getOwnerNotificationTemplate = (bookingData) => {
@@ -945,4 +974,93 @@ export const getRequestStatusTemplate = (requestData) => {
     </body>
     </html>
   `;
+};
+
+export const getLoginOtpTemplate = (userData) => {
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your Login OTP</title>
+</head>
+<body style="margin:0; padding:0; background:#f1f5f9; font-family: Arial, sans-serif;">
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="padding: 30px 0;">
+    <tr>
+      <td align="center">
+
+        <!-- Card -->
+        <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:12px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.08);">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:linear-gradient(135deg,#6366f1,#4f46e5); padding:30px; text-align:center; color:#ffffff;">
+              <h1 style="margin:0; font-size:28px;">🔐 Login Verification</h1>
+              <p style="margin:8px 0 0; font-size:15px; opacity:0.9;">
+                MessFinder Security Check
+              </p>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding:30px; color:#334155;">
+
+              <h2 style="margin-top:0;">Hello ${userData.name},</h2>
+              <p>
+                We received a request to log in to your MessFinder account.
+                Please use the verification code below to complete your login.
+              </p>
+
+              <!-- OTP Box -->
+              <div style="background:#eef2ff; border:2px dashed #6366f1; border-radius:12px; padding:25px; text-align:center; margin:25px 0;">
+                <p style="margin:0 0 10px; font-size:14px; color:#475569;">
+                  Your One-Time Password (OTP)
+                </p>
+                <div style="font-size:36px; font-weight:bold; letter-spacing:10px; color:#4f46e5;">
+                  ${userData.otp}
+                </div>
+                <p style="margin:10px 0 0; font-size:13px; color:#64748b;">
+                  ⏱ Valid for <strong>10 minutes</strong>
+                </p>
+              </div>
+
+              <!-- Info -->
+              <p style="font-size:14px; color:#475569;">
+                For your security:
+              </p>
+              <ul style="font-size:14px; color:#475569; padding-left:20px;">
+                <li>Do not share this code with anyone</li>
+                <li>MessFinder staff will never ask for your OTP</li>
+                <li>If this wasn’t you, please secure your account immediately</li>
+              </ul>
+
+              <!-- Support -->
+              <p style="font-size:14px; color:#64748b; margin-top:25px;">
+                If you did not request this login, please contact our support team right away.
+              </p>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#0f172a; color:#cbd5f5; padding:20px; text-align:center; font-size:13px;">
+              <p style="margin:5px 0;">MessFinder Security Team</p>
+              <p style="margin:5px 0;">support@messfinder.com</p>
+              <p style="margin:5px 0;">© ${new Date().getFullYear()} MessFinder. All rights reserved.</p>
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
+`;
 };

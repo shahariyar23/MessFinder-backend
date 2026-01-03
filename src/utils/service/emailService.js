@@ -1,5 +1,5 @@
 import transporter from '../emailService.js';
-import { getAccountDeactivatedTemplate, getBookingConfirmationTemplate, getOwnerNotificationTemplate, getPasswordResetSuccessTemplate, getPasswordResetTemplate, getPaymentSuccessTemplate, getRequestStatusTemplate, getStatusUpdateTemplate } from '../emailTemplates.js';
+import { getAccountDeactivatedTemplate, getBookingConfirmationTemplate, getLoginOtpTemplate, getOwnerNotificationTemplate, getPasswordResetSuccessTemplate, getPasswordResetTemplate, getPaymentSuccessTemplate, getRequestStatusTemplate, getStatusUpdateTemplate } from '../emailTemplates.js';
 import path from 'path';
 import fs from 'fs';
 import { generatePaymentReceiptPDF } from '../paymentPDFGenerator.js';
@@ -133,6 +133,23 @@ export const sendPasswordResetCode = async (userEmail, userData) => {
       to: userEmail,
       subject: 'Password Reset Code - MessFinder',
       html: getPasswordResetTemplate(userData),
+    };
+
+    const result = await transporter.sendMail(mailOptions);
+    //console.log('Password reset code email sent:', result.messageId);
+    return result;
+  } catch (error) {
+    console.error('Error sending password reset code email:', error);
+    throw error;
+  }
+};
+export const sendLoginOtpEmail = async (userEmail, userData) => {
+  try {
+    const mailOptions = {
+      from: `"MessFinder" <${process.env.EMAIL_USER}>`,
+      to: userEmail,
+      subject: 'One time Password login - MessFinder',
+      html: getLoginOtpTemplate(userData),
     };
 
     const result = await transporter.sendMail(mailOptions);
