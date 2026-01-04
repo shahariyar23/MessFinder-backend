@@ -14,7 +14,8 @@ import {
 import { authMiddleware } from "../middleware/authMiddleware.js";
 import { getAllPaymentsAdmin, getPaymentStatistics, refundPayment, updatePaymentStatus } from "../controllers/payment.controller.js";
 import { adminDeleteBooking, adminGetBookingById, adminRefundBooking, adminUpdateBookingStatus, adminUpdatePaymentStatus, getAllBookingsAdmin, getBookingStatistics } from "../controllers/booking.controller.js";
-import { getAllHomePageSlider, homePageAddSlider } from "../controllers/home.controller.js";
+import { deleteHomeSlider, getAllHomePageSlider, homePageAddSlider } from "../controllers/home.controller.js";
+import { upload } from "../middleware/multer.js";
 
 
 const adminRoute = express.Router();
@@ -53,7 +54,11 @@ adminRoute.route("/booking/:bookingId").delete(authMiddleware, adminDeleteBookin
 
 
 
-adminRoute.route('/home-page-slider').post(authMiddleware, homePageAddSlider);
+adminRoute.route('/home-page-slider').post(authMiddleware, 
+    upload.single("image"), 
+    homePageAddSlider);
 adminRoute.route('/get-home-page-slider').get(getAllHomePageSlider);
+adminRoute.route('/home-slider-delete/:id').delete(authMiddleware, deleteHomeSlider);
+
 
 export default adminRoute;
