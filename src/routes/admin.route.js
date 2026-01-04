@@ -14,6 +14,7 @@ import {
 import { authMiddleware } from "../middleware/authMiddleware.js";
 import { getAllPaymentsAdmin, getPaymentStatistics, refundPayment, updatePaymentStatus } from "../controllers/payment.controller.js";
 import { adminDeleteBooking, adminGetBookingById, adminRefundBooking, adminUpdateBookingStatus, adminUpdatePaymentStatus, getAllBookingsAdmin, getBookingStatistics } from "../controllers/booking.controller.js";
+import { getAllHomePageSlider, homePageAddSlider } from "../controllers/home.controller.js";
 
 
 const adminRoute = express.Router();
@@ -46,5 +47,13 @@ adminRoute.route("/booking/:bookingId/status").put(authMiddleware, adminUpdateBo
 adminRoute.route("/booking/:bookingId/payment-status").put( authMiddleware, adminUpdatePaymentStatus);
 adminRoute.route("/booking/:bookingId/refund").post( authMiddleware, adminRefundBooking);
 adminRoute.route("/booking/:bookingId").delete(authMiddleware, adminDeleteBooking);
+
+
+
+
+
+
+adminRoute.route('/home-page-slider').post(authMiddleware, homePageAddSlider);
+adminRoute.route('/get-home-page-slider').get(getAllHomePageSlider);
 
 export default adminRoute;

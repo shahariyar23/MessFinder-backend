@@ -361,8 +361,6 @@ const getAllMess = asyncHandler(async (req, res) => {
     // Always set status to "free"
     const queryStatus = "free";
 
-    console.log('🔍 Filtering messes with status:', req.query);
-
     // STEP 1: First find all messes with status "free" using find()
     const baseQuery = {
         status: queryStatus
