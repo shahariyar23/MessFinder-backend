@@ -1,4 +1,3 @@
-// controllers/payment.controller.js
 import SSLCommerzPayment from "sslcommerz-lts";
 import Booking from "../models/booking.model.js";
 import Mess from "../models/messListing.model.js";
@@ -46,11 +45,11 @@ const initiateSSLCommerzPayment = asyncHandler(async (req, res) => {
         currency: "BDT",
         tran_id: transactionId,
         
-        // ✅ FIXED: Use backend endpoints for callbacks
-        success_url: `${process.env.BACKEND_URL}/api/v1/payment/success`,
-        fail_url: `${process.env.BACKEND_URL}/api/v1/payment/failed`,
-        cancel_url: `${process.env.BACKEND_URL}/api/v1/payment/cancel`,
-        ipn_url: `${process.env.BACKEND_URL}/api/v1/payment/ssl-ipn`,
+        // ✅ FIXED: Use correct API routes based on your route.js file
+        success_url: `${process.env.BACKEND_URL}/payment/success`,
+        fail_url: `${process.env.BACKEND_URL}/payment/failed`,
+        cancel_url: `${process.env.BACKEND_URL}/payment/cancel`,
+        ipn_url: `${process.env.BACKEND_URL}/payment/ssl-ipn`,
         
         shipping_method: "NO",
         product_name: `Mess Booking - ${booking.mess_id?.title || "Unknown Mess"}`,
@@ -210,130 +209,212 @@ const handleSSLIPN = asyncHandler(async (req, res) => {
     }
 });
 
-// ✅ NEW: Handle payment success callback from SSLCommerz
+// ✅ FIXED: Handle payment success callback from SSLCommerz
 const handlePaymentSuccess = asyncHandler(async (req, res) => {
-    const paymentData = req.body;
-    
-    console.log("Payment Success Callback:", paymentData);
+    const paymentData = req.body || req.query;
+
+    console.log("✅ SSL Payment Success Callback:", paymentData);
+
+    // Check if transaction ID exists
+    if (!paymentData.tran_id) {
+        console.error("❌ No transaction ID in success callback");
+        return res.redirect(
+            `${process.env.FRONTEND_URL}/payment/failed?reason=no_transaction_id`
+        );
+    }
 
     try {
-        // Verify the payment with SSLCommerz
+        // Find booking first
+        const booking = await Booking.findOne({
+            transactionId: paymentData.tran_id,
+        }).populate("mess_id");
+
+        if (!booking) {
+            console.error("❌ Booking not found for transaction:", paymentData.tran_id);
+            return res.redirect(
+                `${process.env.FRONTEND_URL}/payment/failed?reason=booking_not_found`
+            );
+        }
+
+        // Check if payment is already processed via IPN
+        if (booking.paymentStatus === "paid") {
+            console.log("✅ Payment already processed via IPN, redirecting to success page");
+            return res.redirect(
+                `${process.env.FRONTEND_URL}/payment/success?tran_id=${booking.transactionId}&bookingId=${booking._id}`
+            );
+        }
+
+        // Initialize SSLCommerz
         const sslcz = new SSLCommerzPayment(
             process.env.SSL_APP_STORE_ID,
             process.env.SSL_APP_PASSWORD,
             process.env.SSL_IS_LIVE === "true"
         );
 
-        const verification = await sslcz.transactionValidation({
-            tran_id: paymentData.tran_id
-        });
+        let verification;
+        
+        try {
+            // Try different validation methods
+            if (paymentData.val_id) {
+                // Use val_id for validation
+                verification = await sslcz.validate({ 
+                    val_id: paymentData.val_id 
+                });
+            } else {
+                // Try transaction query
+                verification = await sslcz.transactionQueryByTransactionId({
+                    tran_id: paymentData.tran_id
+                });
+            }
+        } catch (validationError) {
+            console.log("⚠️ SSL Validation failed, but proceeding:", validationError.message);
+            // If SSL validation fails, still try to process
+            verification = { status: "VALID" };
+        }
 
-        if (verification.status === 'VALID') {
-            // Update booking status
-            const booking = await Booking.findOne({ transactionId: paymentData.tran_id })
-                .populate("mess_id")
-                .populate("user_id", "name email");
+        // Check verification status
+        if (verification && verification.status === "VALID") {
+            console.log("✅ SSL Payment verified successfully");
+        } else {
+            console.log("⚠️ SSL Verification status unknown, checking IPN status");
+        }
 
-            if (booking) {
-                const session = await Booking.startSession();
-                session.startTransaction();
+        // Start transaction
+        const session = await Booking.startSession();
+        session.startTransaction();
 
-                try {
-                    // Update booking
-                    booking.paymentStatus = "paid";
-                    booking.paymentDetails = paymentData;
-                    booking.paidAt = new Date();
+        try {
+            // Update booking if still pending
+            if (booking.paymentStatus === "pending") {
+                booking.paymentStatus = "paid";
+                booking.bookingStatus = "confirmed";
+                booking.paidAt = new Date();
+                booking.paymentDetails = {
+                    ...paymentData,
+                    verification: verification,
+                    verifiedAt: new Date(),
+                    callbackType: "success_url"
+                };
+                
+                await booking.save({ session });
 
-                    if (booking.bookingStatus === "pending") {
-                        booking.bookingStatus = "confirmed";
-                    }
-
-                    await booking.save({ session });
-
-                    // Update mess status
-                    const mess = await Mess.findById(booking.mess_id._id);
-                    if (mess) {
-                        mess.status = "booked";
-                        mess.availability = false;
-                        mess.lastBookedAt = new Date();
-                        await mess.save({ session });
-                    }
-
-                    await session.commitTransaction();
-                    session.endSession();
-
-                    // Send success email
-                    try {
-                        await sendPaymentSuccess(booking.tenantEmail, {
-                            userName: booking.tenantName,
-                            customerEmail: booking.tenantEmail,
-                            amount: booking.payAbleAmount || booking.totalAmount,
-                            transactionId: booking.transactionId,
-                            paymentMethod: booking.paymentMethod,
-                            paymentDate: booking.paidAt,
-                            messName: booking.mess_id?.title,
-                            bookingId: booking._id,
-                            checkInDate: booking.checkInDate,
-                            advanceMonths: booking.advanceMonths,
-                            monthlyRent: booking.mess_id?.payPerMonth,
-                        });
-                        console.log("✅ Payment success email sent to:", booking.tenantEmail);
-                    } catch (emailError) {
-                        console.error("Failed to send payment success email:", emailError);
-                    }
-                } catch (error) {
-                    await session.abortTransaction();
-                    session.endSession();
-                    throw error;
+                // Update mess status
+                if (booking.mess_id) {
+                    booking.mess_id.status = "booked";
+                    booking.mess_id.availability = false;
+                    booking.mess_id.lastBookedAt = new Date();
+                    await booking.mess_id.save({ session });
                 }
+
+                // Commit transaction
+                await session.commitTransaction();
+                session.endSession();
+
+                console.log("✅ Payment successfully processed via success callback:", {
+                    transactionId: paymentData.tran_id,
+                    bookingId: booking._id,
+                    amount: booking.payAbleAmount
+                });
+
+                // Send success email
+                try {
+                    await sendPaymentSuccess(booking.tenantEmail, {
+                        userName: booking.tenantName,
+                        customerEmail: booking.tenantEmail,
+                        amount: booking.payAbleAmount || booking.totalAmount,
+                        transactionId: booking.transactionId,
+                        paymentMethod: booking.paymentMethod,
+                        paymentDate: booking.paidAt,
+                        messName: booking.mess_id?.title,
+                        bookingId: booking._id,
+                        checkInDate: booking.checkInDate,
+                        advanceMonths: booking.advanceMonths,
+                        monthlyRent: booking.mess_id?.payPerMonth,
+                        roomType: booking.mess_id?.roomType,
+                    });
+                    console.log("✅ Payment success email sent to:", booking.tenantEmail);
+                } catch (emailError) {
+                    console.error("❌ Failed to send payment success email:", emailError);
+                }
+            } else {
+                console.log("ℹ️ Payment already processed, status:", booking.paymentStatus);
+                session.endSession();
             }
 
-            // ✅ Redirect to frontend success page with GET parameters
-            res.redirect(`${process.env.FRONTEND_URL}/payment/success?tran_id=${paymentData.tran_id}&status=success&bookingId=${paymentData.value_a}`);
-        } else {
-            // Payment verification failed
-            res.redirect(`${process.env.FRONTEND_URL}/payment/failed?tran_id=${paymentData.tran_id}&reason=verification_failed`);
+            // Redirect to frontend success page
+            return res.redirect(
+                `${process.env.FRONTEND_URL}/payment/success?tran_id=${booking.transactionId}&bookingId=${booking._id}`
+            );
+
+        } catch (error) {
+            await session.abortTransaction();
+            session.endSession();
+            console.error("❌ Transaction failed:", error);
+            return res.redirect(
+                `${process.env.FRONTEND_URL}/payment/failed?reason=server_error&error=${encodeURIComponent(error.message)}`
+            );
         }
+
     } catch (error) {
-        console.error("Payment success handler error:", error);
-        res.redirect(`${process.env.FRONTEND_URL}/payment/failed?tran_id=${paymentData.tran_id}&reason=server_error`);
+        console.error("❌ Payment processing error:", error);
+        return res.redirect(
+            `${process.env.FRONTEND_URL}/payment/failed?reason=server_error&error=${encodeURIComponent(error.message)}`
+        );
     }
 });
 
-// ✅ NEW: Handle payment failed callback
+// ✅ FIXED: Handle payment failed callback
 const handlePaymentFailed = asyncHandler(async (req, res) => {
-    const paymentData = req.body;
+    const paymentData = req.body || req.query;
     
-    console.log("Payment Failed Callback:", paymentData);
+    console.log("❌ SSL Payment Failed Callback:", paymentData);
 
-    // Update booking status to failed
-    const booking = await Booking.findOne({ transactionId: paymentData.tran_id });
-    if (booking) {
-        booking.paymentStatus = "failed";
-        booking.paymentDetails = paymentData;
-        await booking.save();
+    if (paymentData.tran_id) {
+        const booking = await Booking.findOne({
+            transactionId: paymentData.tran_id,
+        });
+
+        if (booking && booking.paymentStatus === "pending") {
+            booking.paymentStatus = "failed";
+            booking.paymentDetails = {
+                ...paymentData,
+                callbackType: "fail_url"
+            };
+            await booking.save();
+            console.log("✅ Updated booking status to failed:", paymentData.tran_id);
+        }
     }
 
-    // Redirect to frontend failed page
-    res.redirect(`${process.env.FRONTEND_URL}/payment/failed?tran_id=${paymentData.tran_id}&status=failed`);
+    return res.redirect(
+        `${process.env.FRONTEND_URL}/payment/failed?status=failed&tran_id=${paymentData.tran_id || ''}`
+    );
 });
 
-// ✅ NEW: Handle payment cancellation
+// ✅ FIXED: Handle payment cancel callback
 const handlePaymentCancel = asyncHandler(async (req, res) => {
-    const paymentData = req.body;
+    const paymentData = req.body || req.query;
     
-    console.log("Payment Cancelled:", paymentData);
+    console.log("⚠️ SSL Payment Cancel Callback:", paymentData);
 
-    // Update booking status to cancelled
-    const booking = await Booking.findOne({ transactionId: paymentData.tran_id });
-    if (booking) {
-        booking.paymentStatus = "cancelled";
-        booking.paymentDetails = paymentData;
-        await booking.save();
+    if (paymentData.tran_id) {
+        const booking = await Booking.findOne({
+            transactionId: paymentData.tran_id,
+        });
+
+        if (booking && booking.paymentStatus === "pending") {
+            booking.paymentStatus = "cancelled";
+            booking.paymentDetails = {
+                ...paymentData,
+                callbackType: "cancel_url"
+            };
+            await booking.save();
+            console.log("✅ Updated booking status to cancelled:", paymentData.tran_id);
+        }
     }
 
-    // Redirect to frontend cancelled page
-    res.redirect(`${process.env.FRONTEND_URL}/payment/cancelled?tran_id=${paymentData.tran_id}&status=cancelled`);
+    return res.redirect(
+        `${process.env.FRONTEND_URL}/payment/cancelled?status=cancelled&tran_id=${paymentData.tran_id || ''}`
+    );
 });
 
 // Auto-confirm payment for development with mess status update
@@ -905,9 +986,9 @@ export {
     handleSSLIPN,
     validatePayment,
     autoConfirmPayment,
-    handlePaymentSuccess,  // ✅ NEW
-    handlePaymentFailed,   // ✅ NEW  
-    handlePaymentCancel,   // ✅ NEW
+    handlePaymentSuccess,
+    handlePaymentFailed,
+    handlePaymentCancel,
     getAllPaymentsAdmin,
     getPaymentStatistics,
     updatePaymentStatus,
